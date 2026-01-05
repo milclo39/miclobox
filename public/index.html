@@ -51,7 +51,8 @@
             background: #3b82f6; color: white;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
         }
-        button.camera-active {
+        /* 背景パネル起動中 */
+        button.bg-active {
             background: #10b981; color: white;
         }
 
@@ -66,8 +67,8 @@
             flex-wrap: wrap;
         }
 
-        /* --- 設定パネル --- */
-        .pen-settings {
+        /* --- 共通パネルスタイル (ペン設定 & 背景設定) --- */
+        .popup-panel {
             position: fixed;
             top: 70px;
             left: 15px;
@@ -81,8 +82,11 @@
             flex-direction: column;
             gap: 12px;
             width: fit-content;
+            max-width: 80vw;
+            max-height: 70vh;
+            overflow-y: auto;
         }
-        .pen-settings.show { display: flex; }
+        .popup-panel.show { display: flex; }
         
         .setting-group {
             display: flex;
@@ -95,7 +99,25 @@
             padding-bottom: 10px;
         }
 
-        /* --- 色・太さ・透過ボタン --- */
+        /* 背景設定用のボタンスタイル */
+        .bg-option-btn {
+            width: auto;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            background: white;
+            border: 1px solid #ddd;
+            color: #444;
+            border-radius: 6px;
+        }
+        .bg-option-btn:hover { background: #f3f4f6; }
+        .bg-option-btn.selected {
+            background: #10b981;
+            color: white;
+            border-color: #10b981;
+        }
+
+        /* ペン設定用スタイル */
         .color-btn {
             width: 28px; height: 28px; border-radius: 50%; padding: 0; box-shadow: none;
             border: 2px solid transparent;
@@ -139,15 +161,24 @@
 <body>
 
 <div class="controls">
-    <button id="camera-btn" title="カメラ起動/停止">📷</button>
-    <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
+    <button id="bg-menu-btn" title="背景設定">🖼️</button> <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
     <button id="settings-toggle-btn" title="ペン設定">🎨</button>
     <button id="eraser-btn" title="消しゴム">🧼</button>
     <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="clear-btn" title="全消去">🗑️</button>
 </div>
 
-<div id="pen-settings" class="pen-settings">
+<div id="bg-settings" class="popup-panel">
+    <div class="setting-group">
+        <button class="bg-option-btn selected" id="bg-none-btn">📝</button>
+        <button class="bg-option-btn" id="bg-image-btn">🖼️</button>
+    </div>
+    <div class="setting-group" id="camera-list-container" style="display:none;">
+        <!--div style="width:100%; font-size:12px; color:#666; margin-bottom:5px;">カメラを選択:</div-->
+        </div>
+</div>
+
+<div id="pen-settings" class="popup-panel">
     <div class="setting-group" id="color-options"></div>
     <div class="setting-group">
         <button class="size-btn selected" data-size="5" title="細い"><span class="dot" style="width:6px; height:6px;"></span></button>
@@ -163,6 +194,8 @@
     </div>
 </div>
 
+<input type="file" id="image-uploader" accept="image/*" style="display: none;">
+
 <div class="media-controls">
     <button id="snap-btn" title="画像を保存">📸</button>
     <button id="record-btn" title="録画開始/停止"><div class="icon"></div></button>
@@ -173,10 +206,10 @@
     <canvas id="drawCanvas"></canvas>
 </div>
 
-<video id="video-feed" playsinline style="display:none;"></video>
+<video id="video-feed" playsinline autoplay muted style="display:none;"></video>
 
 <script>
-    const STORAGE_KEY = 'ar_drawing_data_v4'; 
+    const STORAGE_KEY = 'ar_drawing_data_v5'; 
     const colors = [
         { code: '#000000' }, { code: '#FFFFFF' },
         { code: '#EF4444' }, { code: '#F97316' },
@@ -184,22 +217,30 @@
         { code: '#3B82F6' }, { code: '#A855F7' }
     ];
 
+    // --- 状態管理 ---
     let state = {
         tool: 'pen',
         hexColor: '#000000',
         size: 5,
-        alpha: 1.0
+        alpha: 1.0,
+        bgMode: 'white' // 'white', 'image', 'camera'
     };
 
     let activePointers = new Map();
     let paths = [];
-    let isCameraRunning = false;
+    
+    // 背景・カメラ関連
     let videoStream = null;
+    let backgroundImage = null; // Imageオブジェクト
     let animationId = null;
+    let isBgLoopRunning = false;
+
+    // 録画関連
     let mediaRecorder = null;
     let recordedChunks = [];
     let isRecording = false;
 
+    // DOM要素
     const drawCanvas = document.getElementById('drawCanvas');
     const bgCanvas = document.getElementById('bgCanvas');
     const drawCtx = drawCanvas.getContext('2d');
@@ -207,16 +248,22 @@
     const recCanvas = document.createElement('canvas');
     const recCtx = recCanvas.getContext('2d');
     const video = document.getElementById('video-feed');
-    const penSettingsPanel = document.getElementById('pen-settings');
     
+    const penSettingsPanel = document.getElementById('pen-settings');
+    const bgSettingsPanel = document.getElementById('bg-settings');
+    const imageUploader = document.getElementById('image-uploader');
+    const cameraListContainer = document.getElementById('camera-list-container');
+
+    // --- 初期化 ---
     function init() {
         resize();
         window.addEventListener('resize', resize);
         createColorButtons();
         setupEventListeners();
         loadFromStorage();
-        bgCtx.fillStyle = 'white';
-        bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+        
+        // 初期背景描画
+        updateBackgroundState();
     }
 
     function resize() {
@@ -225,11 +272,254 @@
         bgCanvas.width = w; bgCanvas.height = h;
         recCanvas.width = w; recCanvas.height = h;
         redrawLines();
-        if (!isCameraRunning) {
-            bgCtx.fillStyle = 'white';
-            bgCtx.fillRect(0, 0, w, h);
+        // 背景の再描画（ループが回っていない場合のため）
+        if (!isBgLoopRunning) drawStaticBackground();
+    }
+
+    function setupEventListeners() {
+        // --- ツールバー ---
+        document.getElementById('pen-tool-btn').onclick = switchToPen;
+        document.getElementById('eraser-btn').onclick = switchToEraser;
+        
+        // パネル開閉
+        document.getElementById('settings-toggle-btn').onclick = (e) => {
+            e.stopPropagation();
+            bgSettingsPanel.classList.remove('show'); // 背景パネルは閉じる
+            penSettingsPanel.classList.toggle('show');
+        };
+        document.getElementById('bg-menu-btn').onclick = async (e) => {
+            e.stopPropagation();
+            penSettingsPanel.classList.remove('show'); // ペンパネルは閉じる
+            bgSettingsPanel.classList.toggle('show');
+            if (bgSettingsPanel.classList.contains('show')) {
+                // パネルを開いたタイミングでカメラリストを更新
+                await refreshCameraList();
+            }
+        };
+
+        // --- 背景設定 ---
+        document.getElementById('bg-none-btn').onclick = () => setBackgroundMode('white');
+        document.getElementById('bg-image-btn').onclick = () => imageUploader.click();
+        
+        // 画像アップロード処理
+        imageUploader.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const img = new Image();
+                img.onload = () => {
+                    backgroundImage = img;
+                    setBackgroundMode('image');
+                };
+                img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // --- ペン設定 ---
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.onclick = () => {
+                state.size = parseInt(btn.dataset.size);
+                updateUISelection('.size-btn', btn);
+            };
+        });
+        document.querySelectorAll('.opacity-btn').forEach(btn => {
+            btn.onclick = () => {
+                state.alpha = parseFloat(btn.dataset.alpha);
+                updateUISelection('.opacity-btn', btn);
+            };
+        });
+
+        // --- アクション ---
+        document.getElementById('undo-btn').onclick = undo;
+        document.getElementById('clear-btn').onclick = clearAll;
+        document.getElementById('snap-btn').onclick = takeSnapshot;
+        document.getElementById('record-btn').onclick = toggleRecording;
+
+        // --- Pointer Events ---
+        drawCanvas.addEventListener('pointerdown', handlePointerDown);
+        drawCanvas.addEventListener('pointermove', handlePointerMove);
+        drawCanvas.addEventListener('pointerup', handlePointerUp);
+        drawCanvas.addEventListener('pointercancel', handlePointerUp);
+        
+        // 画面クリックでパネルを閉じる
+        drawCanvas.addEventListener('click', () => {
+             penSettingsPanel.classList.remove('show');
+             bgSettingsPanel.classList.remove('show');
+        });
+    }
+
+    // --- 背景ロジック ---
+
+    function setBackgroundMode(mode, cameraDeviceId = null) {
+        state.bgMode = mode;
+        
+        // UI更新
+        document.getElementById('bg-none-btn').classList.toggle('selected', mode === 'white');
+        document.getElementById('bg-image-btn').classList.toggle('selected', mode === 'image');
+        const camBtns = document.querySelectorAll('.camera-select-btn');
+        camBtns.forEach(btn => btn.classList.remove('selected'));
+
+        if (mode === 'white' || mode === 'image') {
+            stopCameraStream();
+            document.getElementById('bg-menu-btn').classList.remove('bg-active');
+            isBgLoopRunning = false; 
+            if (animationId) cancelAnimationFrame(animationId);
+            drawStaticBackground(); // 静止画として描画
+            
+            // 録画中は静止画でもループが必要（ストリーム維持のため）
+            if (isRecording) startBackgroundLoop(); 
+            
+        } else if (mode === 'camera') {
+            document.getElementById('bg-menu-btn').classList.add('bg-active');
+            startCameraStream(cameraDeviceId);
         }
     }
+
+    // カメラリストの取得とボタン生成
+    async function refreshCameraList() {
+        // カメラアクセス権限がないとラベルが取れないため、まずは仮のリクエスト
+        try {
+             // すでにストリームがあるか確認、なければ一時的に取得して権限を得る
+            if (!videoStream) {
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                tempStream.getTracks().forEach(t => t.stop());
+            }
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+            cameraListContainer.innerHTML = '<div style="width:100%; font-size:12px; color:#666; margin-bottom:5px;">カメラを選択:</div>';
+            
+            if (videoDevices.length > 0) {
+                cameraListContainer.style.display = 'flex';
+                videoDevices.forEach((device, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'bg-option-btn camera-select-btn';
+                    btn.textContent = device.label || `カメラ ${index + 1}`;
+                    btn.onclick = () => {
+                        setBackgroundMode('camera', device.deviceId);
+                        // すべてのカメラボタンの選択状態リセット
+                        document.querySelectorAll('.camera-select-btn').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    };
+                    // 現在のカメラなら選択状態に
+                    if (state.bgMode === 'camera' && videoStream) {
+                        const currentTrack = videoStream.getVideoTracks()[0];
+                        if (currentTrack && currentTrack.getSettings().deviceId === device.deviceId) {
+                            btn.classList.add('selected');
+                        }
+                    }
+                    cameraListContainer.appendChild(btn);
+                });
+            } else {
+                cameraListContainer.innerHTML += '<div style="font-size:12px;">カメラが見つかりません</div>';
+            }
+        } catch (e) {
+            console.error(e);
+            cameraListContainer.innerHTML = '<div style="font-size:12px;">カメラ権限が必要です</div>';
+            cameraListContainer.style.display = 'flex';
+        }
+    }
+
+    async function startCameraStream(deviceId) {
+        stopCameraStream(); // 既存のストリームを停止
+        const constraints = {
+            video: {
+                deviceId: deviceId ? { exact: deviceId } : undefined,
+                facingMode: deviceId ? undefined : 'environment' // ID指定なければ背面優先
+            },
+            audio: false
+        };
+        
+        try {
+            videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = videoStream;
+            await video.play();
+            startBackgroundLoop();
+        } catch (err) {
+            alert("カメラエラー: " + err.message);
+            setBackgroundMode('white');
+        }
+    }
+
+    function stopCameraStream() {
+        if (videoStream) {
+            videoStream.getTracks().forEach(t => t.stop());
+            videoStream = null;
+        }
+        video.srcObject = null;
+    }
+
+    function startBackgroundLoop() {
+        if (!isBgLoopRunning) {
+            isBgLoopRunning = true;
+            renderBackgroundLoop();
+        }
+    }
+
+    function renderBackgroundLoop() {
+        // ループが必要な条件: カメラモード中 OR 録画中
+        if (state.bgMode !== 'camera' && !isRecording) {
+            isBgLoopRunning = false;
+            return;
+        }
+
+        drawStaticBackground(); // 現在のモードに合わせて描画
+        animationId = requestAnimationFrame(renderBackgroundLoop);
+    }
+
+    // モードに応じた1フレームの描画処理
+    function drawStaticBackground() {
+        const w = bgCanvas.width;
+        const h = bgCanvas.height;
+
+        if (state.bgMode === 'white') {
+            bgCtx.fillStyle = 'white';
+            bgCtx.fillRect(0, 0, w, h);
+        } 
+        else if (state.bgMode === 'image' && backgroundImage) {
+            // 画像のアスペクト比維持描画 (Contain: 全体が見えるように)
+            bgCtx.fillStyle = '#f0f0f0'; // 余白は薄いグレー
+            bgCtx.fillRect(0, 0, w, h);
+            
+            const imgW = backgroundImage.width;
+            const imgH = backgroundImage.height;
+            const scale = Math.min(w / imgW, h / imgH);
+            const dW = imgW * scale;
+            const dH = imgH * scale;
+            const offsetX = (w - dW) / 2;
+            const offsetY = (h - dH) / 2;
+            
+            bgCtx.drawImage(backgroundImage, offsetX, offsetY, dW, dH);
+        } 
+        else if (state.bgMode === 'camera' && video.readyState === 4) {
+            // カメラ映像の描画 (Cover: 画面いっぱいに)
+            const vW = video.videoWidth;
+            const vH = video.videoHeight;
+            const scale = Math.max(w / vW, h / vH);
+            const dW = vW * scale;
+            const dH = vH * scale;
+            const offsetX = (w - dW) / 2;
+            const offsetY = (h - dH) / 2;
+            
+            bgCtx.drawImage(video, offsetX, offsetY, dW, dH);
+        }
+
+        // 録画中はここで録画用キャンバスも更新
+        if (isRecording) {
+            recCtx.drawImage(bgCanvas, 0, 0);
+            recCtx.drawImage(drawCanvas, 0, 0);
+        }
+    }
+
+    function updateBackgroundState() {
+        // 現在の状態を再適用（初期化時など）
+        setBackgroundMode(state.bgMode);
+    }
+
+    // --- その他UIヘルパー ---
 
     function createColorButtons() {
         const container = document.getElementById('color-options');
@@ -247,64 +537,32 @@
             container.appendChild(btn);
         });
     }
-
-    function setupEventListeners() {
-        document.getElementById('pen-tool-btn').onclick = switchToPen;
-        document.getElementById('eraser-btn').onclick = switchToEraser;
-        document.getElementById('settings-toggle-btn').onclick = (e) => {
-            e.stopPropagation();
-            penSettingsPanel.classList.toggle('show');
-        };
-        document.querySelectorAll('.size-btn').forEach(btn => {
-            btn.onclick = () => {
-                state.size = parseInt(btn.dataset.size);
-                updateUISelection('.size-btn', btn);
-            };
-        });
-        document.querySelectorAll('.opacity-btn').forEach(btn => {
-            btn.onclick = () => {
-                state.alpha = parseFloat(btn.dataset.alpha);
-                updateUISelection('.opacity-btn', btn);
-            };
-        });
-        document.getElementById('undo-btn').onclick = undo;
-        document.getElementById('clear-btn').onclick = clearAll;
-        document.getElementById('camera-btn').onclick = toggleCamera;
-        document.getElementById('snap-btn').onclick = takeSnapshot;
-        document.getElementById('record-btn').onclick = toggleRecording;
-
-        drawCanvas.addEventListener('pointerdown', handlePointerDown);
-        drawCanvas.addEventListener('pointermove', handlePointerMove);
-        drawCanvas.addEventListener('pointerup', handlePointerUp);
-        drawCanvas.addEventListener('pointercancel', handlePointerUp);
-    }
-
     function updateUISelection(selector, activeBtn) {
         document.querySelectorAll(selector).forEach(b => b.classList.remove('selected'));
         activeBtn.classList.add('selected');
     }
-
     function switchToPen() {
         state.tool = 'pen';
         document.getElementById('pen-tool-btn').classList.add('active-tool');
         document.getElementById('eraser-btn').classList.remove('active-tool');
         penSettingsPanel.classList.add('show');
+        bgSettingsPanel.classList.remove('show');
     }
-
     function switchToEraser() {
         state.tool = 'eraser';
         document.getElementById('pen-tool-btn').classList.remove('active-tool');
         document.getElementById('eraser-btn').classList.add('active-tool');
         penSettingsPanel.classList.remove('show');
+        bgSettingsPanel.classList.remove('show');
     }
 
+    // --- 描画ロジック (Smooth Curve) ---
     function getRgbaColor(hex, alpha) {
         const r = parseInt(hex.substring(1, 3), 16);
         const g = parseInt(hex.substring(3, 5), 16);
         const b = parseInt(hex.substring(5, 7), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
-
     function redrawLines() {
         drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
         drawCtx.lineCap = 'round';
@@ -312,48 +570,33 @@
         paths.forEach(path => drawPath(path));
         activePointers.forEach(path => drawPath(path));
     }
-
-    // ★★★ スムージング処理の実装箇所 ★★★
     function drawPath(path) {
         const p = path.points;
         if (p.length < 1) return;
-
         drawCtx.save();
         drawCtx.lineWidth = path.width;
-        
         if (path.tool === 'eraser') {
             drawCtx.globalCompositeOperation = 'destination-out';
         } else {
             drawCtx.globalCompositeOperation = 'source-over';
             drawCtx.strokeStyle = path.color;
         }
-
         drawCtx.beginPath();
-
         if (p.length === 1) {
-            // 点が1つの場合は円を描画
             drawCtx.arc(p[0].x, p[0].y, path.width / 2, 0, Math.PI * 2);
             if (path.tool !== 'eraser') drawCtx.fillStyle = path.color;
             drawCtx.fill();
         } else {
-            // 滑らかな曲線描画ロジック
             drawCtx.moveTo(p[0].x, p[0].y);
-            
-            // 点が3つ未満なら直線
             if (p.length < 3) {
-                for (let i = 1; i < p.length; i++) {
-                    drawCtx.lineTo(p[i].x, p[i].y);
-                }
+                for (let i = 1; i < p.length; i++) drawCtx.lineTo(p[i].x, p[i].y);
             } else {
-                // quadraticCurveToで中点同士を結ぶ
                 let i;
                 for (i = 1; i < p.length - 2; i++) {
                     const xc = (p[i].x + p[i + 1].x) / 2;
                     const yc = (p[i].y + p[i + 1].y) / 2;
-                    // p[i]を制御点とし、中点(xc, yc)へ線を引く
                     drawCtx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);
                 }
-                // 最後の2点は曲線で結びきる
                 drawCtx.quadraticCurveTo(p[i].x, p[i].y, p[i + 1].x, p[i + 1].y);
             }
             drawCtx.stroke();
@@ -365,27 +608,22 @@
     function handlePointerDown(e) {
         e.preventDefault();
         penSettingsPanel.classList.remove('show');
-
+        bgSettingsPanel.classList.remove('show'); // 描画開始時に全パネル閉じる
         const drawColor = getRgbaColor(state.hexColor, state.alpha);
         const newPath = {
-            id: e.pointerId,
-            points: [{ x: e.clientX, y: e.clientY }],
-            tool: state.tool,
-            color: drawColor,
-            width: state.tool === 'eraser' ? 25 : state.size
+            id: e.pointerId, points: [{ x: e.clientX, y: e.clientY }],
+            tool: state.tool, color: drawColor, width: state.tool === 'eraser' ? 25 : state.size
         };
         activePointers.set(e.pointerId, newPath);
         drawCanvas.setPointerCapture(e.pointerId);
         redrawLines();
     }
-
     function handlePointerMove(e) {
         if (!activePointers.has(e.pointerId)) return;
         const path = activePointers.get(e.pointerId);
         path.points.push({ x: e.clientX, y: e.clientY });
         redrawLines();
     }
-
     function handlePointerUp(e) {
         if (activePointers.has(e.pointerId)) {
             const path = activePointers.get(e.pointerId);
@@ -397,67 +635,19 @@
         }
     }
 
+    // --- 保存・録画 ---
     function undo() {
-        if (paths.length > 0) {
-            paths.pop();
-            redrawLines();
-            saveToStorage();
-        }
+        if (paths.length > 0) { paths.pop(); redrawLines(); saveToStorage(); }
     }
     function clearAll() {
-        if (confirm('すべて消去しますか？')) {
-            paths = [];
-            redrawLines();
-            saveToStorage();
-        }
+        if (confirm('すべて消去しますか？')) { paths = []; redrawLines(); saveToStorage(); }
     }
-    function saveToStorage() {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(paths)); } catch(e){}
-    }
-    function loadFromStorage() {
-        const json = localStorage.getItem(STORAGE_KEY);
-        if (json) { try { paths = JSON.parse(json); redrawLines(); } catch(e){} }
-    }
-
-    // カメラ・録画関連
-    async function toggleCamera() {
-        if (isCameraRunning) stopCamera();
-        else await startCamera();
-    }
-    async function startCamera() {
-        try {
-            const constraints = { video: { facingMode: 'environment' }, audio: false };
-            videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = videoStream;
-            await video.play();
-            isCameraRunning = true;
-            document.getElementById('camera-btn').classList.add('camera-active');
-            renderCameraLoop();
-        } catch (err) { alert('Camera Error: ' + err.message); }
-    }
-    function stopCamera() {
-        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
-        cancelAnimationFrame(animationId);
-        video.srcObject = null;
-        isCameraRunning = false;
-        document.getElementById('camera-btn').classList.remove('camera-active');
-        bgCtx.fillStyle = 'white';
-        bgCtx.fillRect(0,0, bgCanvas.width, bgCanvas.height);
-    }
-    function renderCameraLoop() {
-        if (!isCameraRunning) return;
-        const w = bgCanvas.width, h = bgCanvas.height;
-        const vW = video.videoWidth, vH = video.videoHeight;
-        const scale = Math.max(w / vW, h / vH);
-        const dW = vW * scale, dH = vH * scale;
-        bgCtx.drawImage(video, (w - dW)/2, (h - dH)/2, dW, dH);
-        if (isRecording) {
-            recCtx.drawImage(bgCanvas, 0, 0);
-            recCtx.drawImage(drawCanvas, 0, 0);
-        }
-        animationId = requestAnimationFrame(renderCameraLoop);
-    }
+    function saveToStorage() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(paths)); } catch(e){} }
+    function loadFromStorage() { const json = localStorage.getItem(STORAGE_KEY); if (json) { try { paths = JSON.parse(json); redrawLines(); } catch(e){} } }
+    
     function takeSnapshot() {
+        // 背景が画像の時など、ループ外でも確実に今の状態を描画
+        drawStaticBackground();
         const tCanvas = document.createElement('canvas');
         tCanvas.width = drawCanvas.width; tCanvas.height = drawCanvas.height;
         const tCtx = tCanvas.getContext('2d');
@@ -468,6 +658,7 @@
         link.href = tCanvas.toDataURL('image/png');
         link.click();
     }
+
     function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
     function startRecording() {
         recordedChunks = [];
@@ -486,19 +677,16 @@
         mediaRecorder.start();
         isRecording = true;
         document.getElementById('record-btn').classList.add('recording');
-        if (!isCameraRunning) loopRec();
+        
+        // 録画中は、背景が静止画モードでもストリーム用のループを回す
+        startBackgroundLoop();
     }
     function stopRecording() {
         if (mediaRecorder) mediaRecorder.stop();
         isRecording = false;
         document.getElementById('record-btn').classList.remove('recording');
-    }
-    function loopRec() {
-        if (!isRecording || isCameraRunning) return;
-        recCtx.fillStyle = 'white';
-        recCtx.fillRect(0,0,recCanvas.width,recCanvas.height);
-        recCtx.drawImage(drawCanvas,0,0);
-        requestAnimationFrame(loopRec);
+        // カメラ以外ならループ停止
+        if (state.bgMode !== 'camera') isBgLoopRunning = false;
     }
 
     init();
