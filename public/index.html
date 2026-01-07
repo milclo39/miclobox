@@ -14,11 +14,24 @@
             font-family: sans-serif;
             user-select: none;
         }
-        #canvas-container {
+        
+        #viewport {
             position: relative;
             width: 100vw;
             height: 100vh;
+            overflow: hidden;
+            background: #333;
         }
+        #zoom-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
         canvas {
             position: absolute;
             top: 0;
@@ -27,164 +40,116 @@
         }
         #bgCanvas { z-index: 0; background: white; }
         #drawCanvas { z-index: 1; background: transparent; }
-        
-        /* --- ボタン共通スタイル --- */
+
+        /* UIスタイル */
         button {
-            width: 44px;
-            height: 44px;
-            font-size: 20px;
-            cursor: pointer;
-            border: none;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.9);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            outline: none;
+            width: 44px; height: 44px; font-size: 20px; cursor: pointer; border: none; border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9); box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s; outline: none;
         }
         button:active { transform: scale(0.92); }
+        button.active-tool { background: #3b82f6; color: white; }
+        button.bg-active { background: #10b981; color: white; }
+        button.zoom-active { background: #f59e0b; color: white; box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px rgba(245, 158, 11, 0.5); }
 
-        /* ツール選択状態 */
-        button.active-tool {
-            background: #3b82f6; color: white;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-        }
-        /* 背景パネル起動中 */
-        button.bg-active {
-            background: #10b981; color: white;
-        }
-
-        /* --- メイン操作パネル --- */
-        .controls {
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        /* --- 共通パネルスタイル (ペン設定 & 背景設定) --- */
+        .controls { position: fixed; top: 15px; left: 15px; z-index: 100; display: flex; gap: 10px; flex-wrap: wrap; }
+        
         .popup-panel {
-            position: fixed;
-            top: 70px;
-            left: 15px;
-            z-index: 99;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(8px);
-            padding: 12px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-            display: none;
-            flex-direction: column;
-            gap: 12px;
-            width: fit-content;
-            max-width: 80vw;
-            max-height: 70vh;
-            overflow-y: auto;
+            position: fixed; top: 70px; left: 15px; z-index: 99;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
+            padding: 12px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            display: none; flex-direction: column; gap: 12px;
+            width: fit-content; max-width: 90vw; max-height: 80vh; overflow-y: auto;
         }
         .popup-panel.show { display: flex; }
+        .setting-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+        .bg-option-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; background: white; border: 1px solid #ddd; color: #444; border-radius: 6px; width: auto; }
+        .bg-option-btn.selected { background: #10b981; color: white; border-color: #10b981; }
         
-        .setting-group {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
+        /* 解像度ボタン用 */
+        .res-btn {
+            padding: 6px 10px; font-size: 12px; font-weight: bold; background: white; border: 1px solid #ddd; 
+            color: #444; border-radius: 4px; width: auto; height: auto;
         }
-        .setting-group:not(:last-child) {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-
-        /* 背景設定用のボタンスタイル */
-        .bg-option-btn {
-            width: auto;
-            padding: 8px 12px;
-            font-size: 14px;
-            font-weight: bold;
-            background: white;
-            border: 1px solid #ddd;
-            color: #444;
-            border-radius: 6px;
-        }
-        .bg-option-btn:hover { background: #f3f4f6; }
-        .bg-option-btn.selected {
-            background: #10b981;
-            color: white;
-            border-color: #10b981;
-        }
-
-        /* ペン設定用スタイル */
-        .color-btn {
-            width: 28px; height: 28px; border-radius: 50%; padding: 0; box-shadow: none;
-            border: 2px solid transparent;
-        }
-        .color-btn.selected {
-            border-color: #555; transform: scale(1.15); box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .size-btn {
-            width: 36px; height: 36px; background: transparent; box-shadow: none; border: 1px solid #eee;
-        }
+        .res-btn:hover { background: #f3f4f6; }
+        .res-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+        
+        .color-btn { width: 28px; height: 28px; border-radius: 50%; padding: 0; border: 2px solid transparent; }
+        .color-btn.selected { border-color: #555; transform: scale(1.15); }
+        .size-btn { width: 36px; height: 36px; background: transparent; border: 1px solid #eee; }
         .size-btn.selected { background: #eef2ff; border-color: #3b82f6; }
         .dot { background: #333; border-radius: 50%; display: block; }
-        .opacity-btn {
-            width: auto; padding: 0 8px; font-size: 12px; font-weight: bold; height: 32px;
-            background: white; border: 1px solid #ddd; color: #666;
-        }
+        .opacity-btn { width: auto; padding: 0 8px; font-size: 12px; font-weight: bold; height: 32px; background: white; border: 1px solid #ddd; color: #666; }
         .opacity-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
 
-        /* --- 録画・撮影用バー --- */
-        .media-controls {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-            display: flex;
-            gap: 25px;
-        }
-        #snap-btn, #record-btn {
-            width: 64px; height: 64px; border-radius: 50%; font-size: 26px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        #record-btn .icon {
-            width: 26px; height: 26px; background: #ef4444; border-radius: 50%; transition: all 0.3s;
-        }
+        .media-controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 25px; }
+        #snap-btn, #record-btn { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #record-btn .icon { width: 26px; height: 26px; background: #ef4444; border-radius: 50%; transition: all 0.3s; }
         #record-btn.recording { border: 4px solid rgba(239,68,68,0.3); background: white; }
         #record-btn.recording .icon { border-radius: 4px; transform: scale(0.6); }
 
+        #zoom-controls {
+            position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 98;
+            width: 80%; max-width: 400px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
+            padding: 10px 20px; border-radius: 20px; display: none; align-items: center; gap: 10px;
+            color: white; font-weight: bold; font-size: 14px;
+        }
+        #zoom-controls.show { display: flex; }
+        input[type=range] { flex: 1; height: 6px; -webkit-appearance: none; background: rgba(255,255,255,0.3); border-radius: 3px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 
 <div class="controls">
-    <button id="bg-menu-btn" title="背景設定">🖼️</button> <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
+    <button id="zoom-mode-btn" title="ズームモード切替">🔍</button>
+    <button id="bg-menu-btn" title="背景設定">🖼️</button>
+    <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
     <button id="settings-toggle-btn" title="ペン設定">🎨</button>
     <button id="eraser-btn" title="消しゴム">🧼</button>
     <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="clear-btn" title="全消去">🗑️</button>
 </div>
 
+<div id="zoom-controls">
+    <span id="zoom-text">100%</span>
+    <input type="range" id="zoom-slider" min="100" max="1000" value="100" step="10">
+</div>
+
 <div id="bg-settings" class="popup-panel">
     <div class="setting-group">
-        <button class="bg-option-btn selected" id="bg-none-btn">📝</button>
-        <button class="bg-option-btn" id="bg-image-btn">🖼️</button>
+        <button class="bg-option-btn selected" id="bg-none-btn">なし (白)</button>
+        <button class="bg-option-btn" id="bg-image-btn">画像を選択</button>
     </div>
-    <div class="setting-group" id="camera-list-container" style="display:none;">
-        <!--div style="width:100%; font-size:12px; color:#666; margin-bottom:5px;">カメラを選択:</div-->
+    
+    <div class="setting-group" id="camera-list-container" style="display:none; flex-direction:column; align-items:flex-start;">
         </div>
+
+    <div class="setting-group" style="display:flex; flex-direction:column; align-items:flex-start; margin-top:5px; border-top:1px solid #eee; padding-top:10px;">
+        <div style="width:100%; font-size:12px; color:#666; margin-bottom:5px; display:flex; justify-content:space-between;">
+            <span>解像度設定:</span>
+            <span id="current-res-info" style="color:#3b82f6; font-weight:bold;">-</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px;">
+            <button class="res-btn selected" data-w="" data-h="">未指定</button>
+            <button class="res-btn" data-w="640" data-h="480">640x480</button>
+            <button class="res-btn" data-w="720" data-h="480">720x480</button>
+            <button class="res-btn" data-w="1280" data-h="720">1280x720</button>
+            <button class="res-btn" data-w="1280" data-h="960">1280x960</button>
+            <button class="res-btn" data-w="1920" data-h="1080">1920x1080</button>
+            <button class="res-btn" data-w="3840" data-h="2160">3840x2160</button>
+        </div>
+    </div>
 </div>
 
 <div id="pen-settings" class="popup-panel">
     <div class="setting-group" id="color-options"></div>
     <div class="setting-group">
-        <button class="size-btn selected" data-size="5" title="細い"><span class="dot" style="width:6px; height:6px;"></span></button>
-        <button class="size-btn" data-size="10" title="普通"><span class="dot" style="width:12px; height:12px;"></span></button>
-        <button class="size-btn" data-size="20" title="太い"><span class="dot" style="width:18px; height:18px;"></span></button>
-        <button class="size-btn" data-size="40" title="極太"><span class="dot" style="width:24px; height:24px;"></span></button>
+        <button class="size-btn selected" data-size="5"><span class="dot" style="width:6px; height:6px;"></span></button>
+        <button class="size-btn" data-size="10"><span class="dot" style="width:12px; height:12px;"></span></button>
+        <button class="size-btn" data-size="20"><span class="dot" style="width:18px; height:18px;"></span></button>
+        <button class="size-btn" data-size="40"><span class="dot" style="width:24px; height:24px;"></span></button>
     </div>
     <div class="setting-group">
         <button class="opacity-btn selected" data-alpha="1.0">100%</button>
@@ -201,46 +166,47 @@
     <button id="record-btn" title="録画開始/停止"><div class="icon"></div></button>
 </div>
 
-<div id="canvas-container">
-    <canvas id="bgCanvas"></canvas>
-    <canvas id="drawCanvas"></canvas>
+<div id="viewport">
+    <div id="zoom-container">
+        <canvas id="bgCanvas"></canvas>
+        <canvas id="drawCanvas"></canvas>
+    </div>
 </div>
 
 <video id="video-feed" playsinline autoplay muted style="display:none;"></video>
 
 <script>
-    const STORAGE_KEY = 'ar_drawing_data_v5'; 
+    const STORAGE_KEY = 'ar_drawing_data_v8'; 
     const colors = [
-        { code: '#000000' }, { code: '#FFFFFF' },
-        { code: '#EF4444' }, { code: '#F97316' },
-        { code: '#EAB308' }, { code: '#22C55E' },
-        { code: '#3B82F6' }, { code: '#A855F7' }
+        { code: '#000000' }, { code: '#FFFFFF' }, { code: '#EF4444' }, { code: '#F97316' },
+        { code: '#EAB308' }, { code: '#22C55E' }, { code: '#3B82F6' }, { code: '#A855F7' }
     ];
 
-    // --- 状態管理 ---
     let state = {
-        tool: 'pen',
-        hexColor: '#000000',
-        size: 5,
-        alpha: 1.0,
-        bgMode: 'white' // 'white', 'image', 'camera'
+        tool: 'pen', hexColor: '#000000', size: 5, alpha: 1.0, 
+        bgMode: 'white',
+        cameraResolution: null, // { width, height } or null
+        currentDeviceId: null
+    };
+    
+    let zoomState = {
+        active: false, scale: 1.0, translateX: 0, translateY: 0,
+        isDragging: false, lastX: 0, lastY: 0, initialPinchDist: 0, initialScale: 1.0
     };
 
     let activePointers = new Map();
     let paths = [];
     
-    // 背景・カメラ関連
     let videoStream = null;
-    let backgroundImage = null; // Imageオブジェクト
+    let backgroundImage = null;
     let animationId = null;
     let isBgLoopRunning = false;
-
-    // 録画関連
     let mediaRecorder = null;
     let recordedChunks = [];
     let isRecording = false;
 
-    // DOM要素
+    const viewport = document.getElementById('viewport');
+    const zoomContainer = document.getElementById('zoom-container');
     const drawCanvas = document.getElementById('drawCanvas');
     const bgCanvas = document.getElementById('bgCanvas');
     const drawCtx = drawCanvas.getContext('2d');
@@ -253,16 +219,19 @@
     const bgSettingsPanel = document.getElementById('bg-settings');
     const imageUploader = document.getElementById('image-uploader');
     const cameraListContainer = document.getElementById('camera-list-container');
+    const currentResInfo = document.getElementById('current-res-info');
+    
+    const zoomModeBtn = document.getElementById('zoom-mode-btn');
+    const zoomControls = document.getElementById('zoom-controls');
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomText = document.getElementById('zoom-text');
 
-    // --- 初期化 ---
     function init() {
         resize();
         window.addEventListener('resize', resize);
         createColorButtons();
         setupEventListeners();
         loadFromStorage();
-        
-        // 初期背景描画
         updateBackgroundState();
     }
 
@@ -271,423 +240,286 @@
         drawCanvas.width = w; drawCanvas.height = h;
         bgCanvas.width = w; bgCanvas.height = h;
         recCanvas.width = w; recCanvas.height = h;
+        zoomContainer.style.width = `${w}px`;
+        zoomContainer.style.height = `${h}px`;
         redrawLines();
-        // 背景の再描画（ループが回っていない場合のため）
         if (!isBgLoopRunning) drawStaticBackground();
+        if (zoomState.active) toggleZoomMode(); 
     }
 
     function setupEventListeners() {
-        // --- ツールバー ---
         document.getElementById('pen-tool-btn').onclick = switchToPen;
         document.getElementById('eraser-btn').onclick = switchToEraser;
-        
-        // パネル開閉
         document.getElementById('settings-toggle-btn').onclick = (e) => {
-            e.stopPropagation();
-            bgSettingsPanel.classList.remove('show'); // 背景パネルは閉じる
-            penSettingsPanel.classList.toggle('show');
+            e.stopPropagation(); if(zoomState.active) return;
+            bgSettingsPanel.classList.remove('show'); penSettingsPanel.classList.toggle('show');
         };
         document.getElementById('bg-menu-btn').onclick = async (e) => {
-            e.stopPropagation();
-            penSettingsPanel.classList.remove('show'); // ペンパネルは閉じる
-            bgSettingsPanel.classList.toggle('show');
-            if (bgSettingsPanel.classList.contains('show')) {
-                // パネルを開いたタイミングでカメラリストを更新
-                await refreshCameraList();
-            }
+            e.stopPropagation(); if(zoomState.active) return;
+            penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.toggle('show');
+            if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
         };
 
-        // --- 背景設定 ---
+        zoomModeBtn.onclick = toggleZoomMode;
+        zoomSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            setZoomLevel(val / 100);
+        });
+
         document.getElementById('bg-none-btn').onclick = () => setBackgroundMode('white');
         document.getElementById('bg-image-btn').onclick = () => imageUploader.click();
         
-        // 画像アップロード処理
+        // 解像度ボタン
+        document.querySelectorAll('.res-btn').forEach(btn => {
+            btn.onclick = () => {
+                // UI選択更新
+                document.querySelectorAll('.res-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+
+                // 設定更新
+                const w = btn.dataset.w;
+                const h = btn.dataset.h;
+                if (w && h) {
+                    state.cameraResolution = { width: parseInt(w), height: parseInt(h) };
+                } else {
+                    state.cameraResolution = null; // 未指定
+                }
+
+                // カメラモード中なら再起動
+                if (state.bgMode === 'camera') {
+                    startCameraStream(state.currentDeviceId);
+                }
+            };
+        });
+
         imageUploader.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (evt) => {
                 const img = new Image();
-                img.onload = () => {
-                    backgroundImage = img;
-                    setBackgroundMode('image');
-                };
+                img.onload = () => { backgroundImage = img; setBackgroundMode('image'); };
                 img.src = evt.target.result;
             };
             reader.readAsDataURL(file);
         };
 
-        // --- ペン設定 ---
-        document.querySelectorAll('.size-btn').forEach(btn => {
-            btn.onclick = () => {
-                state.size = parseInt(btn.dataset.size);
-                updateUISelection('.size-btn', btn);
-            };
-        });
-        document.querySelectorAll('.opacity-btn').forEach(btn => {
-            btn.onclick = () => {
-                state.alpha = parseFloat(btn.dataset.alpha);
-                updateUISelection('.opacity-btn', btn);
-            };
-        });
-
-        // --- アクション ---
         document.getElementById('undo-btn').onclick = undo;
         document.getElementById('clear-btn').onclick = clearAll;
         document.getElementById('snap-btn').onclick = takeSnapshot;
         document.getElementById('record-btn').onclick = toggleRecording;
 
-        // --- Pointer Events ---
-        drawCanvas.addEventListener('pointerdown', handlePointerDown);
-        drawCanvas.addEventListener('pointermove', handlePointerMove);
-        drawCanvas.addEventListener('pointerup', handlePointerUp);
-        drawCanvas.addEventListener('pointercancel', handlePointerUp);
-        
-        // 画面クリックでパネルを閉じる
-        drawCanvas.addEventListener('click', () => {
-             penSettingsPanel.classList.remove('show');
-             bgSettingsPanel.classList.remove('show');
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.onclick = () => { state.size = parseInt(btn.dataset.size); updateUISelection('.size-btn', btn); };
         });
+        document.querySelectorAll('.opacity-btn').forEach(btn => {
+            btn.onclick = () => { state.alpha = parseFloat(btn.dataset.alpha); updateUISelection('.opacity-btn', btn); };
+        });
+
+        viewport.addEventListener('pointerdown', handlePointerDown);
+        viewport.addEventListener('pointermove', handlePointerMove);
+        viewport.addEventListener('pointerup', handlePointerUp);
+        viewport.addEventListener('pointercancel', handlePointerUp);
+        
+        viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+        viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+        viewport.addEventListener('touchend', handleTouchEnd);
     }
 
-    // --- 背景ロジック ---
+    // --- ズーム制御 ---
+    function toggleZoomMode() {
+        zoomState.active = !zoomState.active;
+        if (zoomState.active) {
+            zoomModeBtn.classList.add('zoom-active'); zoomControls.classList.add('show');
+            penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show');
+            setZoomLevel(1.0);
+        } else {
+            zoomModeBtn.classList.remove('zoom-active'); zoomControls.classList.remove('show');
+            setZoomLevel(1.0); zoomState.translateX = 0; zoomState.translateY = 0; updateTransform();
+        }
+    }
+    function setZoomLevel(newScale, center = null) {
+        newScale = Math.min(Math.max(newScale, 1.0), 10.0);
+        if (!center) center = { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 };
+        const oldScale = zoomState.scale;
+        const contentX = (center.x - zoomState.translateX) / oldScale;
+        const contentY = (center.y - zoomState.translateY) / oldScale;
+        zoomState.scale = newScale;
+        zoomState.translateX = center.x - (contentX * newScale);
+        zoomState.translateY = center.y - (contentY * newScale);
+        zoomSlider.value = Math.round(zoomState.scale * 100);
+        zoomText.innerText = zoomSlider.value + '%';
+        clampTranslation(); updateTransform();
+    }
+    function clampTranslation() {
+        const w = viewport.clientWidth, h = viewport.clientHeight;
+        const scaledW = w * zoomState.scale, scaledH = h * zoomState.scale;
+        const minX = w - scaledW, minY = h - scaledH;
+        zoomState.translateX = Math.min(0, Math.max(zoomState.translateX, minX));
+        zoomState.translateY = Math.min(0, Math.max(zoomState.translateY, minY));
+    }
+    function updateTransform() {
+        zoomContainer.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+    }
+    function getDistance(touches) { return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); }
+    function getCenter(touches) { return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 }; }
+    function handleTouchStart(e) { if (!zoomState.active) return; if (e.touches.length === 2) { e.preventDefault(); zoomState.isDragging = false; zoomState.initialPinchDist = getDistance(e.touches); zoomState.initialScale = zoomState.scale; } }
+    function handleTouchMove(e) { if (!zoomState.active) return; if (e.touches.length === 2) { e.preventDefault(); const dist = getDistance(e.touches); if (zoomState.initialPinchDist > 0) { const newScale = zoomState.initialScale * (dist / zoomState.initialPinchDist); const center = getCenter(e.touches); setZoomLevel(newScale, center); } } }
+    function handleTouchEnd(e) {}
+    function handlePointerDown(e) {
+        if (!zoomState.active) { penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
+        if (zoomState.active) {
+            if (zoomState.scale > 1.0) { zoomState.isDragging = true; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; viewport.setPointerCapture(e.pointerId); }
+        } else {
+            e.preventDefault(); const drawColor = getRgbaColor(state.hexColor, state.alpha);
+            const newPath = { id: e.pointerId, points: [{x: e.clientX, y: e.clientY}], tool: state.tool, color: drawColor, width: state.tool === 'eraser' ? 25 : state.size };
+            activePointers.set(e.pointerId, newPath); viewport.setPointerCapture(e.pointerId); redrawLines();
+        }
+    }
+    function handlePointerMove(e) {
+        if (zoomState.active) {
+            if (zoomState.isDragging) { const dx = e.clientX - zoomState.lastX; const dy = e.clientY - zoomState.lastY; zoomState.translateX += dx; zoomState.translateY += dy; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; clampTranslation(); updateTransform(); }
+        } else {
+            if (!activePointers.has(e.pointerId)) return; const path = activePointers.get(e.pointerId); path.points.push({x: e.clientX, y: e.clientY}); redrawLines();
+        }
+    }
+    function handlePointerUp(e) {
+        if (zoomState.active) { zoomState.isDragging = false; }
+        else { if (activePointers.has(e.pointerId)) { const path = activePointers.get(e.pointerId); paths.push(path); activePointers.delete(e.pointerId); viewport.releasePointerCapture(e.pointerId); redrawLines(); saveToStorage(); } }
+    }
 
+    // --- 背景・カメラ制御 ---
     function setBackgroundMode(mode, cameraDeviceId = null) {
         state.bgMode = mode;
-        
-        // UI更新
         document.getElementById('bg-none-btn').classList.toggle('selected', mode === 'white');
         document.getElementById('bg-image-btn').classList.toggle('selected', mode === 'image');
-        const camBtns = document.querySelectorAll('.camera-select-btn');
-        camBtns.forEach(btn => btn.classList.remove('selected'));
+        document.querySelectorAll('.camera-select-btn').forEach(b => b.classList.remove('selected'));
 
         if (mode === 'white' || mode === 'image') {
             stopCameraStream();
             document.getElementById('bg-menu-btn').classList.remove('bg-active');
-            isBgLoopRunning = false; 
-            if (animationId) cancelAnimationFrame(animationId);
-            drawStaticBackground(); // 静止画として描画
-            
-            // 録画中は静止画でもループが必要（ストリーム維持のため）
-            if (isRecording) startBackgroundLoop(); 
-            
+            isBgLoopRunning = false; cancelAnimationFrame(animationId);
+            drawStaticBackground();
+            currentResInfo.innerText = "-"; // 情報リセット
+            if(isRecording) startBackgroundLoop();
         } else if (mode === 'camera') {
             document.getElementById('bg-menu-btn').classList.add('bg-active');
             startCameraStream(cameraDeviceId);
         }
     }
-
-    // カメラリストの取得とボタン生成
     async function refreshCameraList() {
-        // カメラアクセス権限がないとラベルが取れないため、まずは仮のリクエスト
         try {
-             // すでにストリームがあるか確認、なければ一時的に取得して権限を得る
-            if (!videoStream) {
-                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                tempStream.getTracks().forEach(t => t.stop());
-            }
-
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
+            if(!videoStream) { const t = await navigator.mediaDevices.getUserMedia({video:true}); t.getTracks().forEach(k=>k.stop()); }
+            const devs = await navigator.mediaDevices.enumerateDevices();
+            const vDevs = devs.filter(d => d.kind === 'videoinput');
             cameraListContainer.innerHTML = '<div style="width:100%; font-size:12px; color:#666; margin-bottom:5px;">カメラを選択:</div>';
-            
-            if (videoDevices.length > 0) {
-                cameraListContainer.style.display = 'flex';
-                videoDevices.forEach((device, index) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'bg-option-btn camera-select-btn';
-                    btn.textContent = device.label || `カメラ ${index + 1}`;
-                    btn.onclick = () => {
-                        setBackgroundMode('camera', device.deviceId);
-                        // すべてのカメラボタンの選択状態リセット
-                        document.querySelectorAll('.camera-select-btn').forEach(b => b.classList.remove('selected'));
-                        btn.classList.add('selected');
-                    };
-                    // 現在のカメラなら選択状態に
-                    if (state.bgMode === 'camera' && videoStream) {
-                        const currentTrack = videoStream.getVideoTracks()[0];
-                        if (currentTrack && currentTrack.getSettings().deviceId === device.deviceId) {
-                            btn.classList.add('selected');
-                        }
-                    }
-                    cameraListContainer.appendChild(btn);
-                });
-            } else {
-                cameraListContainer.innerHTML += '<div style="font-size:12px;">カメラが見つかりません</div>';
-            }
-        } catch (e) {
-            console.error(e);
-            cameraListContainer.innerHTML = '<div style="font-size:12px;">カメラ権限が必要です</div>';
             cameraListContainer.style.display = 'flex';
-        }
+            vDevs.forEach((d, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'bg-option-btn camera-select-btn';
+                btn.textContent = d.label || `カメラ ${i+1}`;
+                btn.onclick = () => { 
+                    setBackgroundMode('camera', d.deviceId); 
+                    document.querySelectorAll('.camera-select-btn').forEach(b=>b.classList.remove('selected')); 
+                    btn.classList.add('selected'); 
+                };
+                if(state.bgMode === 'camera' && state.currentDeviceId === d.deviceId) btn.classList.add('selected');
+                cameraListContainer.appendChild(btn);
+            });
+        } catch(e) { cameraListContainer.style.display='none'; }
     }
 
     async function startCameraStream(deviceId) {
-        stopCameraStream(); // 既存のストリームを停止
+        // 現在のデバイスIDを記憶
+        state.currentDeviceId = deviceId;
+        
+        stopCameraStream(); // リスタート
+        
+        // 制約の作成 (解像度が指定されていれば追加)
         const constraints = {
             video: {
                 deviceId: deviceId ? { exact: deviceId } : undefined,
-                facingMode: deviceId ? undefined : 'environment' // ID指定なければ背面優先
+                facingMode: deviceId ? undefined : 'environment'
             },
             audio: false
         };
-        
+
+        if (state.cameraResolution) {
+            constraints.video.width = { ideal: state.cameraResolution.width };
+            constraints.video.height = { ideal: state.cameraResolution.height };
+        }
+
         try {
             videoStream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = videoStream;
+            
+            // 再生開始を待つ
             await video.play();
-            startBackgroundLoop();
-        } catch (err) {
-            alert("カメラエラー: " + err.message);
-            setBackgroundMode('white');
-        }
-    }
-
-    function stopCameraStream() {
-        if (videoStream) {
-            videoStream.getTracks().forEach(t => t.stop());
-            videoStream = null;
-        }
-        video.srcObject = null;
-    }
-
-    function startBackgroundLoop() {
-        if (!isBgLoopRunning) {
-            isBgLoopRunning = true;
-            renderBackgroundLoop();
-        }
-    }
-
-    function renderBackgroundLoop() {
-        // ループが必要な条件: カメラモード中 OR 録画中
-        if (state.bgMode !== 'camera' && !isRecording) {
-            isBgLoopRunning = false;
-            return;
-        }
-
-        drawStaticBackground(); // 現在のモードに合わせて描画
-        animationId = requestAnimationFrame(renderBackgroundLoop);
-    }
-
-    // モードに応じた1フレームの描画処理
-    function drawStaticBackground() {
-        const w = bgCanvas.width;
-        const h = bgCanvas.height;
-
-        if (state.bgMode === 'white') {
-            bgCtx.fillStyle = 'white';
-            bgCtx.fillRect(0, 0, w, h);
-        } 
-        else if (state.bgMode === 'image' && backgroundImage) {
-            // 画像のアスペクト比維持描画 (Contain: 全体が見えるように)
-            bgCtx.fillStyle = '#f0f0f0'; // 余白は薄いグレー
-            bgCtx.fillRect(0, 0, w, h);
             
-            const imgW = backgroundImage.width;
-            const imgH = backgroundImage.height;
-            const scale = Math.min(w / imgW, h / imgH);
-            const dW = imgW * scale;
-            const dH = imgH * scale;
-            const offsetX = (w - dW) / 2;
-            const offsetY = (h - dH) / 2;
-            
-            bgCtx.drawImage(backgroundImage, offsetX, offsetY, dW, dH);
-        } 
-        else if (state.bgMode === 'camera' && video.readyState === 4) {
-            // カメラ映像の描画 (Cover: 画面いっぱいに)
-            const vW = video.videoWidth;
-            const vH = video.videoHeight;
-            const scale = Math.max(w / vW, h / vH);
-            const dW = vW * scale;
-            const dH = vH * scale;
-            const offsetX = (w - dW) / 2;
-            const offsetY = (h - dH) / 2;
-            
-            bgCtx.drawImage(video, offsetX, offsetY, dW, dH);
-        }
-
-        // 録画中はここで録画用キャンバスも更新
-        if (isRecording) {
-            recCtx.drawImage(bgCanvas, 0, 0);
-            recCtx.drawImage(drawCanvas, 0, 0);
-        }
-    }
-
-    function updateBackgroundState() {
-        // 現在の状態を再適用（初期化時など）
-        setBackgroundMode(state.bgMode);
-    }
-
-    // --- その他UIヘルパー ---
-
-    function createColorButtons() {
-        const container = document.getElementById('color-options');
-        colors.forEach(c => {
-            const btn = document.createElement('button');
-            btn.className = 'color-btn';
-            btn.style.backgroundColor = c.code;
-            if (c.code === '#FFFFFF') btn.style.border = '1px solid #ccc';
-            if (c.code === state.hexColor) btn.classList.add('selected');
-            btn.onclick = () => {
-                state.hexColor = c.code;
-                updateUISelection('.color-btn', btn);
-                switchToPen();
-            };
-            container.appendChild(btn);
-        });
-    }
-    function updateUISelection(selector, activeBtn) {
-        document.querySelectorAll(selector).forEach(b => b.classList.remove('selected'));
-        activeBtn.classList.add('selected');
-    }
-    function switchToPen() {
-        state.tool = 'pen';
-        document.getElementById('pen-tool-btn').classList.add('active-tool');
-        document.getElementById('eraser-btn').classList.remove('active-tool');
-        penSettingsPanel.classList.add('show');
-        bgSettingsPanel.classList.remove('show');
-    }
-    function switchToEraser() {
-        state.tool = 'eraser';
-        document.getElementById('pen-tool-btn').classList.remove('active-tool');
-        document.getElementById('eraser-btn').classList.add('active-tool');
-        penSettingsPanel.classList.remove('show');
-        bgSettingsPanel.classList.remove('show');
-    }
-
-    // --- 描画ロジック (Smooth Curve) ---
-    function getRgbaColor(hex, alpha) {
-        const r = parseInt(hex.substring(1, 3), 16);
-        const g = parseInt(hex.substring(3, 5), 16);
-        const b = parseInt(hex.substring(5, 7), 16);
-        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-    function redrawLines() {
-        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-        drawCtx.lineCap = 'round';
-        drawCtx.lineJoin = 'round';
-        paths.forEach(path => drawPath(path));
-        activePointers.forEach(path => drawPath(path));
-    }
-    function drawPath(path) {
-        const p = path.points;
-        if (p.length < 1) return;
-        drawCtx.save();
-        drawCtx.lineWidth = path.width;
-        if (path.tool === 'eraser') {
-            drawCtx.globalCompositeOperation = 'destination-out';
-        } else {
-            drawCtx.globalCompositeOperation = 'source-over';
-            drawCtx.strokeStyle = path.color;
-        }
-        drawCtx.beginPath();
-        if (p.length === 1) {
-            drawCtx.arc(p[0].x, p[0].y, path.width / 2, 0, Math.PI * 2);
-            if (path.tool !== 'eraser') drawCtx.fillStyle = path.color;
-            drawCtx.fill();
-        } else {
-            drawCtx.moveTo(p[0].x, p[0].y);
-            if (p.length < 3) {
-                for (let i = 1; i < p.length; i++) drawCtx.lineTo(p[i].x, p[i].y);
-            } else {
-                let i;
-                for (i = 1; i < p.length - 2; i++) {
-                    const xc = (p[i].x + p[i + 1].x) / 2;
-                    const yc = (p[i].y + p[i + 1].y) / 2;
-                    drawCtx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);
+            // 実際に適用された解像度を表示
+            setTimeout(() => {
+                if(video.videoWidth) {
+                    currentResInfo.innerText = `現在: ${video.videoWidth}x${video.videoHeight}`;
                 }
-                drawCtx.quadraticCurveTo(p[i].x, p[i].y, p[i + 1].x, p[i + 1].y);
-            }
+            }, 500);
+
+            startBackgroundLoop();
+        } catch(e) { 
+            alert("カメラエラー: " + e.message); 
+            setBackgroundMode('white'); 
+        }
+    }
+    
+    function stopCameraStream() { if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; } video.srcObject=null; }
+    function startBackgroundLoop() { if(!isBgLoopRunning){ isBgLoopRunning=true; renderBackgroundLoop(); } }
+    function renderBackgroundLoop() { if(state.bgMode!=='camera' && !isRecording) { isBgLoopRunning=false; return; } drawStaticBackground(); animationId = requestAnimationFrame(renderBackgroundLoop); }
+    
+    function drawStaticBackground() {
+        const w = bgCanvas.width, h = bgCanvas.height;
+        if(state.bgMode==='white') { bgCtx.fillStyle='white'; bgCtx.fillRect(0,0,w,h); }
+        else if(state.bgMode==='image' && backgroundImage) {
+            bgCtx.fillStyle='#f0f0f0'; bgCtx.fillRect(0,0,w,h);
+            const scale = Math.min(w/backgroundImage.width, h/backgroundImage.height);
+            const dw = backgroundImage.width*scale, dh = backgroundImage.height*scale;
+            bgCtx.drawImage(backgroundImage, (w-dw)/2, (h-dh)/2, dw, dh);
+        } else if(state.bgMode==='camera' && video.readyState===4) {
+            const scale = Math.max(w/video.videoWidth, h/video.videoHeight);
+            const dw = video.videoWidth*scale, dh = video.videoHeight*scale;
+            bgCtx.drawImage(video, (w-dw)/2, (h-dh)/2, dw, dh);
+        }
+        if(isRecording) { recCtx.drawImage(bgCanvas,0,0); recCtx.drawImage(drawCanvas,0,0); }
+    }
+
+    // --- その他ヘルパー ---
+    function getRgbaColor(hex, alpha) { const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${alpha})`; }
+    function redrawLines() { drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); drawCtx.lineCap='round'; drawCtx.lineJoin='round'; paths.forEach(p=>drawPath(p)); activePointers.forEach(p=>drawPath(p)); }
+    function drawPath(path) {
+        const p = path.points; if(p.length<1) return;
+        drawCtx.save(); drawCtx.lineWidth=path.width;
+        if(path.tool==='eraser') drawCtx.globalCompositeOperation='destination-out';
+        else { drawCtx.globalCompositeOperation='source-over'; drawCtx.strokeStyle=path.color; }
+        drawCtx.beginPath();
+        if(p.length===1) { drawCtx.arc(p[0].x,p[0].y,path.width/2,0,Math.PI*2); if(path.tool!=='eraser') drawCtx.fillStyle=path.color; drawCtx.fill(); }
+        else {
+            drawCtx.moveTo(p[0].x,p[0].y);
+            if(p.length<3) for(let i=1;i<p.length;i++) drawCtx.lineTo(p[i].x,p[i].y);
+            else { for(let i=1;i<p.length-2;i++) { const xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2; drawCtx.quadraticCurveTo(p[i].x,p[i].y,xc,yc); } drawCtx.quadraticCurveTo(p[p.length-2].x,p[p.length-2].y,p[p.length-1].x,p[p.length-1].y); }
             drawCtx.stroke();
         }
         drawCtx.restore();
     }
-
-    // --- Pointer Events ---
-    function handlePointerDown(e) {
-        e.preventDefault();
-        penSettingsPanel.classList.remove('show');
-        bgSettingsPanel.classList.remove('show'); // 描画開始時に全パネル閉じる
-        const drawColor = getRgbaColor(state.hexColor, state.alpha);
-        const newPath = {
-            id: e.pointerId, points: [{ x: e.clientX, y: e.clientY }],
-            tool: state.tool, color: drawColor, width: state.tool === 'eraser' ? 25 : state.size
-        };
-        activePointers.set(e.pointerId, newPath);
-        drawCanvas.setPointerCapture(e.pointerId);
-        redrawLines();
-    }
-    function handlePointerMove(e) {
-        if (!activePointers.has(e.pointerId)) return;
-        const path = activePointers.get(e.pointerId);
-        path.points.push({ x: e.clientX, y: e.clientY });
-        redrawLines();
-    }
-    function handlePointerUp(e) {
-        if (activePointers.has(e.pointerId)) {
-            const path = activePointers.get(e.pointerId);
-            paths.push(path);
-            activePointers.delete(e.pointerId);
-            drawCanvas.releasePointerCapture(e.pointerId);
-            redrawLines();
-            saveToStorage();
-        }
-    }
-
-    // --- 保存・録画 ---
-    function undo() {
-        if (paths.length > 0) { paths.pop(); redrawLines(); saveToStorage(); }
-    }
-    function clearAll() {
-        if (confirm('すべて消去しますか？')) { paths = []; redrawLines(); saveToStorage(); }
-    }
-    function saveToStorage() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(paths)); } catch(e){} }
-    function loadFromStorage() { const json = localStorage.getItem(STORAGE_KEY); if (json) { try { paths = JSON.parse(json); redrawLines(); } catch(e){} } }
-    
-    function takeSnapshot() {
-        // 背景が画像の時など、ループ外でも確実に今の状態を描画
-        drawStaticBackground();
-        const tCanvas = document.createElement('canvas');
-        tCanvas.width = drawCanvas.width; tCanvas.height = drawCanvas.height;
-        const tCtx = tCanvas.getContext('2d');
-        tCtx.drawImage(bgCanvas, 0, 0);
-        tCtx.drawImage(drawCanvas, 0, 0);
-        const link = document.createElement('a');
-        link.download = `drawing-${Date.now()}.png`;
-        link.href = tCanvas.toDataURL('image/png');
-        link.click();
-    }
-
-    function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
-    function startRecording() {
-        recordedChunks = [];
-        const stream = recCanvas.captureStream(30);
-        try { mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' }); }
-        catch (e) { mediaRecorder = new MediaRecorder(stream); }
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `video-${Date.now()}.webm`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-        };
-        mediaRecorder.start();
-        isRecording = true;
-        document.getElementById('record-btn').classList.add('recording');
-        
-        // 録画中は、背景が静止画モードでもストリーム用のループを回す
-        startBackgroundLoop();
-    }
-    function stopRecording() {
-        if (mediaRecorder) mediaRecorder.stop();
-        isRecording = false;
-        document.getElementById('record-btn').classList.remove('recording');
-        // カメラ以外ならループ停止
-        if (state.bgMode !== 'camera') isBgLoopRunning = false;
-    }
+    function createColorButtons() { const c = document.getElementById('color-options'); colors.forEach(col => { const b = document.createElement('button'); b.className='color-btn'; b.style.backgroundColor=col.code; if(col.code==='#FFFFFF') b.style.border='1px solid #ccc'; if(col.code===state.hexColor) b.classList.add('selected'); b.onclick=()=>{ state.hexColor=col.code; updateUISelection('.color-btn',b); switchToPen(); }; c.appendChild(b); }); }
+    function updateUISelection(sel, btn) { document.querySelectorAll(sel).forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); }
+    function switchToPen() { state.tool='pen'; document.getElementById('pen-tool-btn').classList.add('active-tool'); document.getElementById('eraser-btn').classList.remove('active-tool'); if(!zoomState.active) penSettingsPanel.classList.add('show'); bgSettingsPanel.classList.remove('show'); }
+    function switchToEraser() { state.tool='eraser'; document.getElementById('pen-tool-btn').classList.remove('active-tool'); document.getElementById('eraser-btn').classList.add('active-tool'); penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
+    function undo() { if(paths.length>0){ paths.pop(); redrawLines(); saveToStorage(); } }
+    function clearAll() { if(confirm('全消去しますか？')){ paths=[]; redrawLines(); saveToStorage(); } }
+    function saveToStorage() { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(paths));}catch(e){} }
+    function loadFromStorage() { const j=localStorage.getItem(STORAGE_KEY); if(j){try{paths=JSON.parse(j);redrawLines();}catch(e){}} }
+    function takeSnapshot() { drawStaticBackground(); const t=document.createElement('canvas'); t.width=drawCanvas.width; t.height=drawCanvas.height; const tx=t.getContext('2d'); tx.drawImage(bgCanvas,0,0); tx.drawImage(drawCanvas,0,0); const l=document.createElement('a'); l.download=`drawing-${Date.now()}.png`; l.href=t.toDataURL('image/png'); l.click(); }
+    function toggleRecording() { isRecording?stopRecording():startRecording(); }
+    function startRecording() { recordedChunks=[]; try{mediaRecorder=new MediaRecorder(recCanvas.captureStream(30),{mimeType:'video/webm'});}catch(e){mediaRecorder=new MediaRecorder(recCanvas.captureStream(30));} mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recordedChunks.push(e.data);}; mediaRecorder.onstop=()=>{const b=new Blob(recordedChunks,{type:'video/webm'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`video-${Date.now()}.webm`; a.click(); window.URL.revokeObjectURL(u);}; mediaRecorder.start(); isRecording=true; document.getElementById('record-btn').classList.add('recording'); startBackgroundLoop(); }
+    function stopRecording() { if(mediaRecorder)mediaRecorder.stop(); isRecording=false; document.getElementById('record-btn').classList.remove('recording'); if(state.bgMode!=='camera') isBgLoopRunning=false; }
 
     init();
 </script>
