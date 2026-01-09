@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>miclobox</title>
     <link rel="icon" href="icon.png">
+    <!-- Tone.js (タイマー音声用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
         body {
             margin: 0;
@@ -51,6 +53,7 @@
         button.active-tool { background: #3b82f6; color: white; }
         button.bg-active { background: #10b981; color: white; }
         button.zoom-active { background: #f59e0b; color: white; box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px rgba(245, 158, 11, 0.5); }
+        button.timer-active { background: #8b5cf6; color: white; }
 
         .controls { position: fixed; top: 15px; left: 15px; z-index: 100; display: flex; gap: 10px; flex-wrap: wrap; }
         
@@ -98,6 +101,112 @@
         #zoom-controls.show { display: flex; }
         input[type=range] { flex: 1; height: 6px; -webkit-appearance: none; background: rgba(255,255,255,0.3); border-radius: 3px; outline: none; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+        /* --- タイマーウィジェット用のスタイル (Compact & Integrated) --- */
+        #timer-widget {
+            position: fixed;
+            top: 80px; left: 80px;
+            z-index: 200;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(4px);
+            border-radius: 50%; /* 円形ベースに */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            display: none;
+            width: 180px;  /* ウィンドウサイズ */
+            height: 180px; /* 正方形 */
+            cursor: grab;
+        }
+        #timer-widget.show { display: block; }
+        #timer-widget:active { cursor: grabbing; }
+
+        /* SVGを背景いっぱいに */
+        .timer-svg-container {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        /* コンテンツ（文字とボタン）を中央配置 */
+        .timer-content {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none; /* ドラッグを妨げない */
+        }
+
+        .timer-text {
+            font-size: 36px; /* 文字大きく */
+            font-weight: 800; 
+            color: #333;
+            font-family: 'Courier New', monospace;
+            letter-spacing: -1px;
+            margin-bottom: 5px; /* ボタンとの間隔 */
+            margin-top: -10px;  /* 少し上寄りに */
+            text-shadow: 0 2px 0 rgba(255,255,255,0.8);
+        }
+
+        .timer-controls {
+            display: flex; gap: 12px;
+            pointer-events: auto; /* ボタンは押せるように */
+        }
+
+        .timer-btn {
+            width: 36px; height: 36px; font-size: 16px; border-radius: 50%;
+            background: #f3f4f6; color: #555;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .timer-btn.primary { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .timer-btn:active { transform: scale(0.95); }
+
+        /* 入力欄（再生中は消す） */
+        .timer-inputs {
+            position: absolute;
+            bottom: 25px; /* 円の下部 */
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 4px; align-items: center;
+            pointer-events: auto;
+            background: rgba(255,255,255,0.9);
+            padding: 2px 6px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        .timer-inputs.hidden-mode {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-50%) scale(0.9);
+        }
+
+        .timer-input {
+            width: 36px; padding: 2px; text-align: center; font-size: 14px;
+            border: 1px solid #ddd; border-radius: 4px; background: transparent;
+            outline: none; font-weight: bold; color: #444;
+        }
+        .timer-input:focus { border-color: #3b82f6; background: white; }
+        .timer-separator { font-weight: bold; color: #999; font-size: 12px; }
+        
+        /* ドラッグハンドルラベル */
+        .timer-handle-label {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            text-align: center;
+            font-size: 9px; color: #aaa; 
+            font-weight:bold; 
+            text-transform:uppercase; 
+            letter-spacing:1px;
+            pointer-events: none;
+        }
+
     </style>
 </head>
 <body>
@@ -106,10 +215,47 @@
     <button id="zoom-mode-btn" title="ズームモード切替">🔍</button>
     <button id="bg-menu-btn" title="背景設定">🖼️</button>
     <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
-    <button id="settings-toggle-btn" title="ペン設定">🎨</button>
+    <!--button id="settings-toggle-btn" title="ペン設定">🎨</button-->
     <button id="eraser-btn" title="消しゴム">🧼</button>
     <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="clear-btn" title="全消去">🗑️</button>
+    <button id="timer-toggle-btn" title="タイマー">⏱️</button>
+</div>
+
+<div id="timer-widget">
+    <!-- 背景の円 -->
+    <div class="timer-svg-container">
+        <svg style="width:100%; height:100%;" viewBox="0 0 100 100">
+            <!-- 背景円 -->
+            <circle cx="50" cy="50" r="48" fill="rgba(255,255,255,0.5)" stroke="#eee" stroke-width="3" />
+            <!-- プログレス円 -->
+            <circle id="timer-ring" cx="50" cy="50" r="48" fill="transparent" stroke="#3b82f6" stroke-width="3" 
+                    stroke-dasharray="301.6" stroke-dashoffset="301.6" stroke-linecap="round" 
+                    transform="rotate(-90 50 50)" style="transition: stroke-dashoffset 0.1s linear;" />
+        </svg>
+    </div>
+
+    <!-- ラベル -->
+    <div class="timer-handle-label">Timer</div>
+
+    <!-- コンテンツ -->
+    <div class="timer-content">
+        <!-- 時間表示 -->
+        <div id="timer-time-text" class="timer-text">03:00</div>
+        
+        <!-- 操作ボタン -->
+        <div class="timer-controls">
+            <button id="timer-start-btn" class="timer-btn primary">▶</button>
+            <button id="timer-reset-btn" class="timer-btn">↺</button>
+        </div>
+    </div>
+
+    <!-- 入力欄 (下部にオーバーレイ) -->
+    <div id="timer-inputs-container" class="timer-inputs">
+        <input id="timer-min" type="number" min="0" max="99" value="3" class="timer-input">
+        <span class="timer-separator">:</span>
+        <input id="timer-sec" type="number" min="0" max="59" value="0" class="timer-input">
+    </div>
 </div>
 
 <div id="zoom-controls">
@@ -186,7 +332,8 @@
         tool: 'pen', hexColor: '#000000', size: 5, alpha: 1.0, 
         bgMode: 'white',
         cameraResolution: null, // { width, height } or null
-        currentDeviceId: null
+        currentDeviceId: null,
+        isTimerVisible: false
     };
     
     let zoomState = {
@@ -226,13 +373,36 @@
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomText = document.getElementById('zoom-text');
 
+    // Timer Elements
+    const timerWidget = document.getElementById('timer-widget');
+    const timerToggleBtn = document.getElementById('timer-toggle-btn');
+    const timerMinInput = document.getElementById('timer-min');
+    const timerSecInput = document.getElementById('timer-sec');
+    const timerTimeText = document.getElementById('timer-time-text');
+    const timerRing = document.getElementById('timer-ring');
+    const timerStartBtn = document.getElementById('timer-start-btn');
+    const timerResetBtn = document.getElementById('timer-reset-btn');
+    const timerInputsContainer = document.getElementById('timer-inputs-container');
+
+    // Timer Logic Variables
+    let tInterval = null;
+    let tTotalSeconds = 0;
+    let tRemainingSeconds = 0;
+    let tIsPaused = true;
+    const tCircumference = 2 * Math.PI * 48;
+
     function init() {
         resize();
         window.addEventListener('resize', resize);
         createColorButtons();
         setupEventListeners();
         loadFromStorage();
-        updateBackgroundState();
+        if (state.bgMode === 'camera') {
+            startCameraStream(state.currentDeviceId);
+        } else {
+            drawStaticBackground();
+        }
+        initTimer();
     }
 
     function resize() {
@@ -250,14 +420,27 @@
     function setupEventListeners() {
         document.getElementById('pen-tool-btn').onclick = switchToPen;
         document.getElementById('eraser-btn').onclick = switchToEraser;
-        document.getElementById('settings-toggle-btn').onclick = (e) => {
-            e.stopPropagation(); if(zoomState.active) return;
-            bgSettingsPanel.classList.remove('show'); penSettingsPanel.classList.toggle('show');
-        };
+//        document.getElementById('settings-toggle-btn').onclick = (e) => {
+//            e.stopPropagation(); if(zoomState.active) return;
+//            bgSettingsPanel.classList.remove('show'); penSettingsPanel.classList.toggle('show');
+//        };
         document.getElementById('bg-menu-btn').onclick = async (e) => {
             e.stopPropagation(); if(zoomState.active) return;
             penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.toggle('show');
             if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
+        };
+
+        // Timer Toggle
+        timerToggleBtn.onclick = (e) => {
+            e.stopPropagation();
+            state.isTimerVisible = !state.isTimerVisible;
+            if(state.isTimerVisible) {
+                timerWidget.classList.add('show');
+                timerToggleBtn.classList.add('timer-active');
+            } else {
+                timerWidget.classList.remove('show');
+                timerToggleBtn.classList.remove('timer-active');
+            }
         };
 
         zoomModeBtn.onclick = toggleZoomMode;
@@ -324,6 +507,161 @@
         viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
         viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
         viewport.addEventListener('touchend', handleTouchEnd);
+        
+        // Timer Drag Logic Setup
+        setupTimerDrag();
+    }
+
+    // --- Timer Logic ---
+    function initTimer() {
+        timerMinInput.addEventListener('input', updateTimerFromInput);
+        timerSecInput.addEventListener('input', updateTimerFromInput);
+        
+        // Stop bubbling so drawing doesn't happen when interacting with timer inputs
+        [timerMinInput, timerSecInput, timerStartBtn, timerResetBtn].forEach(el => {
+            el.addEventListener('pointerdown', (e) => e.stopPropagation());
+            el.addEventListener('touchstart', (e) => e.stopPropagation());
+        });
+
+        timerStartBtn.onclick = (e) => { e.stopPropagation(); toggleTimer(); };
+        timerResetBtn.onclick = (e) => { e.stopPropagation(); resetTimer(); };
+        
+        updateTimerFromInput();
+    }
+
+    function updateTimerFromInput() {
+        if (!tIsPaused) return;
+        const m = parseInt(timerMinInput.value) || 0;
+        const s = parseInt(timerSecInput.value) || 0;
+        tTotalSeconds = m * 60 + s;
+        tRemainingSeconds = tTotalSeconds;
+        updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+        const m = Math.floor(tRemainingSeconds / 60);
+        const s = tRemainingSeconds % 60;
+        timerTimeText.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        
+        // Ring
+        if (tTotalSeconds === 0) {
+            timerRing.style.strokeDashoffset = tCircumference;
+        } else {
+            const offset = tCircumference - (tRemainingSeconds / tTotalSeconds) * tCircumference;
+            timerRing.style.strokeDashoffset = offset;
+        }
+    }
+
+    function toggleTimer() {
+        if (tIsPaused) {
+            // Start
+            if (Tone.context.state !== 'running') Tone.start();
+            
+            if (tRemainingSeconds === 0) {
+                // If 0, do nothing or maybe reset logic? Let's just return if 0 total
+                if (tTotalSeconds === 0) return;
+                tRemainingSeconds = tTotalSeconds; // Restart if finished
+            }
+
+            tIsPaused = false;
+            timerStartBtn.textContent = '⏸';
+            timerInputsContainer.classList.add('hidden-mode');
+            
+            tInterval = setInterval(() => {
+                if (tRemainingSeconds > 0) {
+                    tRemainingSeconds--;
+                    updateTimerDisplay();
+                } else {
+                    finishTimer();
+                }
+            }, 1000);
+        } else {
+            // Pause
+            clearInterval(tInterval);
+            tIsPaused = true;
+            timerStartBtn.textContent = '▶';
+			timerInputsContainer.classList.remove('hidden-mode');
+        }
+    }
+
+    function resetTimer() {
+        clearInterval(tInterval);
+        tIsPaused = true;
+        timerStartBtn.textContent = '▶';
+        timerInputsContainer.classList.remove('hidden-mode');
+        updateTimerFromInput();
+    }
+
+    function finishTimer() {
+        clearInterval(tInterval);
+        tIsPaused = true;
+        timerStartBtn.textContent = '▶';
+        timerInputsContainer.classList.remove('hidden-mode');
+        // Play Sound
+        if (typeof Tone !== 'undefined') {
+            const synth = new Tone.Synth().toDestination();
+            const now = Tone.now();
+            synth.triggerAttackRelease("C5", "8n", now);
+            synth.triggerAttackRelease("E5", "8n", now + 0.15);
+            synth.triggerAttackRelease("G5", "8n", now + 0.3);
+            synth.triggerAttackRelease("C6", "4n", now + 0.45);
+        }
+    }
+    
+    // --- Timer Drag Logic ---
+    function setupTimerDrag() {
+        let isDragging = false;
+        let dragOffsetX = 0, dragOffsetY = 0;
+        
+        const onDragStart = (e) => {
+            // Check if target is input or button
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            
+            isDragging = true;
+            e.stopPropagation(); // Prevent drawing
+            
+            // Get pointer position
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const rect = timerWidget.getBoundingClientRect();
+            dragOffsetX = clientX - rect.left;
+            dragOffsetY = clientY - rect.top;
+            
+            // Capture pointer if not touch (touch handled by touchmove)
+            if (!e.touches) {
+                timerWidget.setPointerCapture(e.pointerId);
+            }
+        };
+        
+        const onDragMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const x = clientX - dragOffsetX;
+            const y = clientY - dragOffsetY;
+            
+            timerWidget.style.left = `${x}px`;
+            timerWidget.style.top = `${y}px`;
+        };
+        
+        const onDragEnd = (e) => {
+            if (isDragging) {
+                isDragging = false;
+                if (!e.touches) timerWidget.releasePointerCapture(e.pointerId);
+            }
+        };
+
+        timerWidget.addEventListener('pointerdown', onDragStart);
+        timerWidget.addEventListener('pointermove', onDragMove);
+        timerWidget.addEventListener('pointerup', onDragEnd);
+        timerWidget.addEventListener('touchstart', onDragStart, {passive: false});
+        timerWidget.addEventListener('touchmove', onDragMove, {passive: false});
+        timerWidget.addEventListener('touchend', onDragEnd);
     }
 
     // --- ズーム制御 ---
@@ -367,6 +705,9 @@
     function handleTouchMove(e) { if (!zoomState.active) return; if (e.touches.length === 2) { e.preventDefault(); const dist = getDistance(e.touches); if (zoomState.initialPinchDist > 0) { const newScale = zoomState.initialScale * (dist / zoomState.initialPinchDist); const center = getCenter(e.touches); setZoomLevel(newScale, center); } } }
     function handleTouchEnd(e) {}
     function handlePointerDown(e) {
+        // Prevent drawing if touching controls
+        if (e.target.closest('.controls') || e.target.closest('.popup-panel') || e.target.closest('#zoom-controls') || e.target.closest('#timer-widget')) return;
+
         if (!zoomState.active) { penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
         if (zoomState.active) {
             if (zoomState.scale > 1.0) { zoomState.isDragging = true; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; viewport.setPointerCapture(e.pointerId); }
