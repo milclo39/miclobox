@@ -215,7 +215,6 @@
     <button id="zoom-mode-btn" title="ズームモード切替">🔍</button>
     <button id="bg-menu-btn" title="背景設定">🖼️</button>
     <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
-    <!--button id="settings-toggle-btn" title="ペン設定">🎨</button-->
     <button id="eraser-btn" title="消しゴム">🧼</button>
     <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="clear-btn" title="全消去">🗑️</button>
@@ -418,17 +417,25 @@
     }
 
     function setupEventListeners() {
-        document.getElementById('pen-tool-btn').onclick = switchToPen;
+		document.getElementById('pen-tool-btn').onclick = () => {
+	        if (state.tool === 'pen') {
+	            // 既にペンの場合：設定パネルを開閉
+	            if(zoomState.active) return;
+	            bgSettingsPanel.classList.remove('show');
+	            penSettingsPanel.classList.toggle('show');
+	        } else {
+	            // 他のツールの場合：ペンに切り替え（switchToPen内でパネルも開く）
+	            switchToPen();
+	        }
+	    };
         document.getElementById('eraser-btn').onclick = switchToEraser;
-//        document.getElementById('settings-toggle-btn').onclick = (e) => {
-//            e.stopPropagation(); if(zoomState.active) return;
-//            bgSettingsPanel.classList.remove('show'); penSettingsPanel.classList.toggle('show');
-//        };
-        document.getElementById('bg-menu-btn').onclick = async (e) => {
-            e.stopPropagation(); if(zoomState.active) return;
-            penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.toggle('show');
-            if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
-        };
+		document.getElementById('bg-menu-btn').onclick = async (e) => {
+	        e.stopPropagation();
+	        if(zoomState.active) return;
+	        penSettingsPanel.classList.remove('show');
+	        bgSettingsPanel.classList.toggle('show');
+	        if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
+	    };
 
         // Timer Toggle
         timerToggleBtn.onclick = (e) => {
