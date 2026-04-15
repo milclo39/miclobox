@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>miclobox</title>
     <link rel="icon" href="icon.png">
+	<link rel="manifest" href="manifest.json">
     <!-- Tone.js (タイマー音声用) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
@@ -321,6 +322,12 @@
 <video id="video-feed" playsinline autoplay muted style="display:none;"></video>
 
 <script>
+	if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("sw_ok"))
+            .catch(err => console.error("sw_err:", err));
+    }
+
     const STORAGE_KEY = 'ar_drawing_data_v8'; 
     const colors = [
         { code: '#000000' }, { code: '#FFFFFF' }, { code: '#EF4444' }, { code: '#F97316' },
