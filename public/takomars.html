@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mars Tako Sling</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(24, 18, 20, 0.72);
+      --line: rgba(255, 222, 169, 0.28);
+      --text: #fff7e7;
+      --muted: #e7c69f;
+      --accent: #ffcf66;
+      --danger: #ff6c64;
+      --good: #66f0b1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #130d14;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      touch-action: none;
+      user-select: none;
+    }
+
+    .game-shell {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      background:
+        radial-gradient(circle at 20% 16%, rgba(255, 207, 102, 0.14), transparent 22%),
+        radial-gradient(circle at 78% 10%, rgba(255, 123, 88, 0.10), transparent 26%),
+        linear-gradient(180deg, #1a101a 0%, #28151b 48%, #6f2f1f 100%);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      left: max(14px, env(safe-area-inset-left));
+      right: max(14px, env(safe-area-inset-right));
+      display: grid;
+      grid-template-columns: minmax(160px, 280px) auto minmax(160px, 280px);
+      align-items: start;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .meter-card,
+    .status-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(12px);
+    }
+
+    .meter-card {
+      padding: 10px;
+    }
+
+    .meter-card.enemy {
+      justify-self: end;
+    }
+
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.2;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .label-row strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .bar {
+      position: relative;
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 247, 231, 0.15);
+    }
+
+    .bar > span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #56e89d, #f8ce5d);
+      transition: width 160ms ease;
+    }
+
+    .enemy .bar > span {
+      background: linear-gradient(90deg, #ff8e64, #ff5c7a);
+    }
+
+    .status-card {
+      justify-self: center;
+      padding: 10px 12px;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--muted);
+      max-width: min(420px, 46vw);
+    }
+
+    .status-card strong {
+      display: block;
+      color: var(--text);
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .overlay.show {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+
+    .dialog {
+      width: min(420px, 100%);
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(20, 14, 18, 0.86);
+      box-shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(16px);
+      text-align: center;
+    }
+
+    .dialog h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 6vw, 48px);
+      letter-spacing: 0;
+    }
+
+    .dialog p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    button {
+      min-height: 42px;
+      border: 1px solid rgba(255, 222, 169, 0.38);
+      border-radius: 8px;
+      padding: 0 18px;
+      background: linear-gradient(180deg, #ffda79, #df6d3d);
+      color: #23100d;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 28px rgba(223, 109, 61, 0.28);
+    }
+
+    @media (max-width: 760px) {
+      .hud {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "player enemy"
+          "status status";
+      }
+
+      .player {
+        grid-area: player;
+      }
+
+      .enemy {
+        grid-area: enemy;
+      }
+
+      .status-card {
+        grid-area: status;
+        max-width: 100%;
+        width: 100%;
+        padding: 8px 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hud {
+        gap: 8px;
+        left: 8px;
+        right: 8px;
+        top: 8px;
+      }
+
+      .meter-card {
+        padding: 8px;
+      }
+
+      .label-row {
+        font-size: 12px;
+      }
+
+      .status-card {
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <canvas id="game" aria-label="Mars Tako Sling game canvas"></canvas>
+  </main>
+
+  <section class="hud" aria-hidden="true">
+    <div class="meter-card player">
+      <div class="label-row">
+        <strong>TAKO-1</strong>
+        <span id="playerHpText">100 / 100</span>
+      </div>
+      <div class="bar"><span id="playerHpBar"></span></div>
+    </div>
+
+    <div class="status-card">
+      <strong id="statusTitle">Mars Tako Sling</strong>
+        <span id="statusText">画面のどこでも引っぱって離すと、逆方向へ飛びます。</span>
+    </div>
+
+    <div class="meter-card enemy">
+      <div class="label-row">
+        <strong id="enemyName">EASY</strong>
+        <span id="enemyHpText">100 / 100</span>
+      </div>
+      <div class="bar"><span id="enemyHpBar"></span></div>
+    </div>
+  </section>
+
+  <section id="overlay" class="overlay show">
+    <div class="dialog">
+      <h1>Mars Tako Sling</h1>
+      <p>低重力の火星ステージで、タコを弓矢のように飛ばして敵に体当たりします。</p>
+      <button id="startButton" type="button">START</button>
+    </div>
+  </section>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const overlay = document.getElementById("overlay");
+      const startButton = document.getElementById("startButton");
+      const statusTitle = document.getElementById("statusTitle");
+      const statusText = document.getElementById("statusText");
+      const playerHpText = document.getElementById("playerHpText");
+      const enemyHpText = document.getElementById("enemyHpText");
+      const playerHpBar = document.getElementById("playerHpBar");
+      const enemyHpBar = document.getElementById("enemyHpBar");
+      const enemyName = document.getElementById("enemyName");
+      const bgm = new Audio("musics/tako.mp3");
+      bgm.loop = true;
+      bgm.volume = 0.48;
+
+      const playerImage = new Image();
+      const enemyImages = {
+        EASY: new Image(),
+        NORMAL: new Image(),
+        HARD: new Image(),
+        BOSS: new Image(),
+      };
+      playerImage.src = "images/tako1.png";
+      enemyImages.EASY.src = "images/tako2.png";
+      enemyImages.NORMAL.src = "images/tako3.png";
+      enemyImages.HARD.src = "images/tako4.png";
+      enemyImages.BOSS.src = "images/tako_boss.png";
+
+      const config = {
+        gravity: 360,
+        damping: 0.994,
+        bounce: 0.82,
+        slingPower: 7.2,
+        maxPull: 145,
+        readySpeed: 70,
+        attackSpeed: 165,
+        attackWindow: 2.2,
+        maxSpeed: 1050,
+        enemyThinkMin: 0.85,
+        enemyThinkMax: 1.7,
+        enemyAimNoise: 0.42,
+        damageScale: 0.038,
+        bossProjectileSpeed: 430,
+      };
+
+      const stages = [
+        {
+          name: "EASY",
+          image: enemyImages.EASY,
+          color: "#ff7667",
+          hp: 100,
+          radiusScale: 1,
+          thinkMin: 0.85,
+          thinkMax: 1.7,
+          aimNoise: 0.42,
+          attackPower: 1,
+          slingMin: 0.58,
+          slingMax: 0.95,
+          projectile: false,
+        },
+        {
+          name: "NORMAL",
+          image: enemyImages.NORMAL,
+          color: "#ff9a4d",
+          hp: 125,
+          radiusScale: 1.04,
+          thinkMin: 0.58,
+          thinkMax: 1.15,
+          aimNoise: 0.32,
+          attackPower: 1.28,
+          slingMin: 0.72,
+          slingMax: 1.08,
+          projectile: false,
+        },
+        {
+          name: "HARD",
+          image: enemyImages.HARD,
+          color: "#f05dff",
+          hp: 155,
+          radiusScale: 1.08,
+          thinkMin: 0.36,
+          thinkMax: 0.82,
+          aimNoise: 0.22,
+          attackPower: 1.62,
+          slingMin: 0.86,
+          slingMax: 1.2,
+          projectile: false,
+        },
+        {
+          name: "BOSS",
+          image: enemyImages.BOSS,
+          color: "#ff3f5f",
+          hp: 260,
+          radiusScale: 1.72,
+          thinkMin: 0.46,
+          thinkMax: 0.95,
+          aimNoise: 0.18,
+          attackPower: 1.45,
+          slingMin: 0.66,
+          slingMax: 1,
+          projectile: true,
+          projectileInterval: 1.25,
+          projectileDamage: 10,
+        },
+      ];
+
+      const state = {
+        width: 0,
+        height: 0,
+        dpr: 1,
+        running: false,
+        over: false,
+        lastTime: performance.now(),
+        stars: [],
+        dust: [],
+        projectiles: [],
+        craters: [],
+        dragging: false,
+        pointerId: null,
+        dragStart: { x: 0, y: 0 },
+        dragNow: { x: 0, y: 0 },
+        shake: 0,
+        messageTimer: 0,
+        stageIndex: 0,
+        pendingNext: false,
+        musicReady: false,
+      };
+
+      const player = makeActor("player", playerImage, "#67f0b1");
+      const enemy = makeActor("enemy", enemyImages.EASY, "#ff7667");
+
+      function makeActor(type, image, color) {
+        return {
+          type,
+          image,
+          color,
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          r: 38,
+          hp: 100,
+          maxHp: 100,
+          cooldown: 0,
+          attackTimer: 0,
+          attackPower: 1,
+          baseRadius: 38,
+          radiusScale: 1,
+          projectileCooldown: 0,
+          invuln: 0,
+          squash: 0,
+          angle: 0,
+          alive: true,
+        };
+      }
+
+      function resize() {
+        state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+        state.width = Math.max(320, window.innerWidth);
+        state.height = Math.max(320, window.innerHeight);
+        canvas.width = Math.floor(state.width * state.dpr);
+        canvas.height = Math.floor(state.height * state.dpr);
+        ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+        player.baseRadius = clamp(Math.min(state.width, state.height) * 0.052, 28, 46);
+        player.r = player.baseRadius;
+        enemy.baseRadius = player.baseRadius;
+        enemy.r = enemy.baseRadius * enemy.radiusScale;
+        buildBackdrop();
+        keepInside(player);
+        keepInside(enemy);
+      }
+
+      function buildBackdrop() {
+        const random = seededRandom(84);
+        state.stars = Array.from({ length: 90 }, () => ({
+          x: random() * state.width,
+          y: random() * state.height * 0.72,
+          s: 0.7 + random() * 1.9,
+          a: 0.22 + random() * 0.48,
+        }));
+        state.craters = Array.from({ length: 16 }, () => ({
+          x: random() * state.width,
+          y: state.height * (0.64 + random() * 0.33),
+          rx: 34 + random() * 108,
+          ry: 9 + random() * 28,
+          a: 0.11 + random() * 0.12,
+        }));
+      }
+
+      function currentStage() {
+        return stages[state.stageIndex];
+      }
+
+      function applyStage() {
+        const stage = currentStage();
+        enemy.image = stage.image;
+        enemy.color = stage.color;
+        enemy.maxHp = stage.hp;
+        enemy.hp = stage.hp;
+        enemy.radiusScale = stage.radiusScale;
+        enemy.r = enemy.baseRadius * stage.radiusScale;
+        enemy.attackPower = stage.attackPower;
+        enemy.projectileCooldown = stage.projectile ? stage.projectileInterval * 0.8 : 0;
+        enemyName.textContent = stage.name;
+      }
+
+      function resetGame() {
+        applyStage();
+        player.x = state.width * 0.24;
+        player.y = state.height * 0.44;
+        player.vx = 0;
+        player.vy = 0;
+        player.hp = player.maxHp;
+        player.cooldown = 0;
+        player.attackTimer = 0;
+        player.invuln = 0;
+        player.alive = true;
+
+        enemy.x = state.width * 0.76;
+        enemy.y = state.height * 0.34;
+        enemy.vx = 0;
+        enemy.vy = 0;
+        enemy.hp = enemy.maxHp;
+        enemy.cooldown = currentStage().thinkMax;
+        enemy.attackTimer = 0;
+        enemy.invuln = 0;
+        enemy.alive = true;
+
+        state.running = true;
+        state.over = false;
+        state.pendingNext = false;
+        state.dragging = false;
+        state.dust.length = 0;
+        state.projectiles.length = 0;
+        state.shake = 0;
+        setStatus(currentStage().name, "空中でも画面を引っぱると、さらに軌道を変えられます。");
+        overlay.classList.remove("show");
+        updateHud();
+      }
+
+      function placePreviewActors() {
+        applyStage();
+        player.x = state.width * 0.25;
+        player.y = state.height * 0.48;
+        player.vx = 0;
+        player.vy = 0;
+        player.attackTimer = 0;
+        player.hp = player.maxHp;
+        player.alive = true;
+
+        enemy.x = state.width * 0.75;
+        enemy.y = state.height * 0.4;
+        enemy.vx = 0;
+        enemy.vy = 0;
+        enemy.attackTimer = 0;
+        enemy.hp = enemy.maxHp;
+        enemy.alive = true;
+      }
+
+      function update(now) {
+        const dt = Math.min((now - state.lastTime) / 1000, 0.033);
+        state.lastTime = now;
+
+        if (state.running) {
+          stepActor(player, dt);
+          stepActor(enemy, dt);
+          collideActors(player, enemy);
+          updateEnemy(dt);
+          updateProjectiles(dt);
+          updateParticles(dt);
+          checkEnd();
+        }
+
+        state.messageTimer = Math.max(0, state.messageTimer - dt);
+        state.shake = Math.max(0, state.shake - dt * 18);
+        draw();
+        requestAnimationFrame(update);
+      }
+
+      function stepActor(actor, dt) {
+        if (!actor.alive) return;
+
+        actor.cooldown = Math.max(0, actor.cooldown - dt);
+        actor.attackTimer = Math.max(0, actor.attackTimer - dt);
+        actor.invuln = Math.max(0, actor.invuln - dt);
+        actor.squash = Math.max(0, actor.squash - dt * 5);
+        actor.vy += config.gravity * dt;
+        actor.vx *= Math.pow(config.damping, dt * 60);
+        actor.vy *= Math.pow(config.damping, dt * 60);
+
+        const speed = Math.hypot(actor.vx, actor.vy);
+        if (speed > config.maxSpeed) {
+          const ratio = config.maxSpeed / speed;
+          actor.vx *= ratio;
+          actor.vy *= ratio;
+        }
+
+        actor.x += actor.vx * dt;
+        actor.y += actor.vy * dt;
+        actor.angle = Math.atan2(actor.vy, actor.vx || 0.001) * 0.18;
+        bounceWalls(actor);
+      }
+
+      function bounceWalls(actor) {
+        let hit = false;
+        if (actor.x - actor.r < 12) {
+          actor.x = actor.r + 12;
+          actor.vx = Math.abs(actor.vx) * config.bounce;
+          hit = true;
+        } else if (actor.x + actor.r > state.width - 12) {
+          actor.x = state.width - actor.r - 12;
+          actor.vx = -Math.abs(actor.vx) * config.bounce;
+          hit = true;
+        }
+
+        if (actor.y - actor.r < 12) {
+          actor.y = actor.r + 12;
+          actor.vy = Math.abs(actor.vy) * config.bounce;
+          hit = true;
+        } else if (actor.y + actor.r > state.height - 12) {
+          actor.y = state.height - actor.r - 12;
+          actor.vy = -Math.abs(actor.vy) * config.bounce;
+          actor.vx *= 0.98;
+          hit = true;
+        }
+
+        if (hit) {
+          actor.squash = 1;
+          state.shake = Math.max(state.shake, Math.min(6, Math.hypot(actor.vx, actor.vy) / 140));
+          spawnDust(actor.x, actor.y, actor.color, 6);
+        }
+      }
+
+      function collideActors(a, b) {
+        if (!a.alive || !b.alive) return;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        const minDist = a.r + b.r;
+        if (dist >= minDist) return;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = minDist - dist;
+        a.x -= nx * overlap * 0.5;
+        a.y -= ny * overlap * 0.5;
+        b.x += nx * overlap * 0.5;
+        b.y += ny * overlap * 0.5;
+
+        const relVx = b.vx - a.vx;
+        const relVy = b.vy - a.vy;
+        const normalSpeed = relVx * nx + relVy * ny;
+        if (normalSpeed < 0) {
+          const impulse = -(1.05) * normalSpeed / 2;
+          a.vx -= impulse * nx;
+          a.vy -= impulse * ny;
+          b.vx += impulse * nx;
+          b.vy += impulse * ny;
+        }
+
+        const impact = Math.hypot(relVx, relVy);
+        if (impact > config.attackSpeed) {
+          const aAttacking = a.attackTimer > 0 && Math.hypot(a.vx, a.vy) > config.attackSpeed;
+          const bAttacking = b.attackTimer > 0 && Math.hypot(b.vx, b.vy) > config.attackSpeed;
+          const baseDamage = Math.round((impact - config.attackSpeed) * config.damageScale);
+
+          if (baseDamage > 0 && aAttacking && b.invuln <= 0) {
+            const damage = Math.max(1, Math.round(baseDamage * a.attackPower));
+            hurt(b, damage);
+            registerHit(damage, impact, (a.x + b.x) / 2, (a.y + b.y) / 2);
+          }
+
+          if (baseDamage > 0 && bAttacking && a.invuln <= 0) {
+            const damage = Math.max(1, Math.round(baseDamage * b.attackPower));
+            hurt(a, damage);
+            registerHit(damage, impact, (a.x + b.x) / 2, (a.y + b.y) / 2);
+          }
+        }
+      }
+
+      function registerHit(damage, impact, x, y) {
+        state.shake = Math.max(state.shake, Math.min(10, damage * 0.45));
+        spawnDust(x, y, "#ffcf66", 16);
+        flashMessage(`${damage} DAMAGE`, impact > 520 ? "大きな体当たりが決まりました。" : "体当たりヒット。");
+      }
+
+      function hurt(actor, damage) {
+        actor.hp = Math.max(0, actor.hp - damage);
+        actor.invuln = 0.32;
+        actor.squash = 1;
+        updateHud();
+        if (actor.hp <= 0) {
+          actor.alive = false;
+          spawnDust(actor.x, actor.y, actor.color, 42);
+        }
+      }
+
+      function updateEnemy(dt) {
+        if (!enemy.alive || state.over) return;
+
+        const stage = currentStage();
+        if (stage.projectile) {
+          enemy.projectileCooldown -= dt;
+          if (enemy.projectileCooldown <= 0) {
+            enemy.projectileCooldown = stage.projectileInterval;
+            shootBossProjectile(stage);
+          }
+        }
+
+        const speed = Math.hypot(enemy.vx, enemy.vy);
+        if (speed > config.readySpeed || enemy.cooldown > 0) return;
+
+        enemy.cooldown = randomBetween(stage.thinkMin, stage.thinkMax);
+        const dx = player.x - enemy.x;
+        const dy = player.y - enemy.y;
+        const baseAngle = Math.atan2(dy, dx);
+        const noisyAngle = baseAngle + randomBetween(-stage.aimNoise, stage.aimNoise);
+        const distance = clamp(Math.hypot(dx, dy), 80, config.maxPull);
+        const power = randomBetween(stage.slingMin, stage.slingMax) * distance * config.slingPower;
+
+        enemy.vx = Math.cos(noisyAngle) * power;
+        enemy.vy = Math.sin(noisyAngle) * power - randomBetween(20, 110);
+        enemy.attackTimer = config.attackWindow;
+        enemy.squash = 1;
+        spawnDust(enemy.x, enemy.y, enemy.color, 12);
+      }
+
+      function shootBossProjectile(stage) {
+        if (!player.alive) return;
+
+        const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x) + randomBetween(-0.1, 0.1);
+        const start = enemy.r + 18;
+        state.projectiles.push({
+          x: enemy.x + Math.cos(angle) * start,
+          y: enemy.y + Math.sin(angle) * start,
+          vx: Math.cos(angle) * config.bossProjectileSpeed,
+          vy: Math.sin(angle) * config.bossProjectileSpeed,
+          r: clamp(enemy.r * 0.16, 10, 18),
+          life: 3.4,
+          damage: stage.projectileDamage,
+          color: stage.color,
+        });
+        spawnDust(enemy.x, enemy.y, stage.color, 8);
+      }
+
+      function updateProjectiles(dt) {
+        for (let i = state.projectiles.length - 1; i >= 0; i -= 1) {
+          const shot = state.projectiles[i];
+          shot.life -= dt;
+          shot.x += shot.vx * dt;
+          shot.y += shot.vy * dt;
+
+          const outside =
+            shot.life <= 0 ||
+            shot.x < -shot.r ||
+            shot.x > state.width + shot.r ||
+            shot.y < -shot.r ||
+            shot.y > state.height + shot.r;
+
+          if (outside) {
+            state.projectiles.splice(i, 1);
+            continue;
+          }
+
+          if (player.alive && player.invuln <= 0 && Math.hypot(player.x - shot.x, player.y - shot.y) < player.r + shot.r) {
+            hurt(player, shot.damage);
+            state.projectiles.splice(i, 1);
+            state.shake = Math.max(state.shake, 7);
+            spawnDust(shot.x, shot.y, shot.color, 22);
+            flashMessage("BOSS SHOT", `${shot.damage}ダメージ`);
+          }
+        }
+      }
+
+      function checkEnd() {
+        if (state.over) return;
+        if (!enemy.alive) {
+          if (state.stageIndex < stages.length - 1) {
+            state.pendingNext = true;
+            endGame("STAGE CLEAR", `${currentStage().name}を突破しました。次の敵が接近中です。`, "NEXT");
+          } else {
+            endGame("ALL CLEAR", "ボス撃破。火星ステージ完全制圧です。", "RESTART");
+          }
+        } else if (!player.alive) {
+          endGame("GAME OVER", `${currentStage().name}に押し切られました。`, "RETRY");
+        }
+      }
+
+      function endGame(title, text, buttonText = "RESTART") {
+        state.over = true;
+        state.running = false;
+        pauseMusic();
+        setStatus(title, text);
+        overlay.querySelector("h1").textContent = title;
+        overlay.querySelector("p").textContent = text;
+        startButton.textContent = buttonText;
+        overlay.classList.add("show");
+      }
+
+      function spawnDust(x, y, color, amount) {
+        for (let i = 0; i < amount; i += 1) {
+          const a = Math.random() * Math.PI * 2;
+          const s = randomBetween(30, 240);
+          state.dust.push({
+            x,
+            y,
+            vx: Math.cos(a) * s,
+            vy: Math.sin(a) * s - randomBetween(0, 80),
+            life: randomBetween(0.35, 0.85),
+            max: 0,
+            size: randomBetween(2, 6),
+            color,
+          });
+          state.dust[state.dust.length - 1].max = state.dust[state.dust.length - 1].life;
+        }
+      }
+
+      function updateParticles(dt) {
+        for (let i = state.dust.length - 1; i >= 0; i -= 1) {
+          const p = state.dust[i];
+          p.life -= dt;
+          p.vy += config.gravity * 0.35 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          if (p.life <= 0) state.dust.splice(i, 1);
+        }
+      }
+
+      function draw() {
+        const sx = state.shake ? randomBetween(-state.shake, state.shake) : 0;
+        const sy = state.shake ? randomBetween(-state.shake, state.shake) : 0;
+        ctx.save();
+        ctx.translate(sx, sy);
+        drawBackground();
+        drawWalls();
+        drawSling();
+        drawProjectiles();
+        drawActor(enemy);
+        drawActor(player);
+        drawParticles();
+        ctx.restore();
+      }
+
+      function drawBackground() {
+        const sky = ctx.createLinearGradient(0, 0, 0, state.height);
+        sky.addColorStop(0, "#170f1b");
+        sky.addColorStop(0.48, "#2a1620");
+        sky.addColorStop(1, "#8b3e25");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, state.width, state.height);
+
+        ctx.fillStyle = "rgba(255, 236, 185, 0.82)";
+        for (const star of state.stars) {
+          ctx.globalAlpha = star.a;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.s, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        const horizon = state.height * 0.64;
+        const ground = ctx.createLinearGradient(0, horizon, 0, state.height);
+        ground.addColorStop(0, "rgba(137, 58, 33, 0.0)");
+        ground.addColorStop(0.1, "rgba(137, 58, 33, 0.46)");
+        ground.addColorStop(1, "rgba(78, 31, 22, 0.85)");
+        ctx.fillStyle = ground;
+        ctx.fillRect(0, horizon, state.width, state.height - horizon);
+
+        for (const crater of state.craters) {
+          ctx.fillStyle = `rgba(32, 18, 17, ${crater.a})`;
+          ctx.beginPath();
+          ctx.ellipse(crater.x, crater.y, crater.rx, crater.ry, -0.05, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = `rgba(255, 202, 140, ${crater.a * 0.8})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      function drawWalls() {
+        ctx.save();
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = "rgba(255, 207, 102, 0.42)";
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "rgba(255, 115, 72, 0.45)";
+        ctx.strokeRect(12, 12, state.width - 24, state.height - 24);
+        ctx.restore();
+      }
+
+      function drawSling() {
+        if (!state.dragging) return;
+
+        const pull = getPullVector();
+        const power = Math.hypot(pull.x, pull.y) / config.maxPull;
+        const targetX = player.x - pull.x;
+        const targetY = player.y - pull.y;
+
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = `rgba(255, 218, 121, ${0.55 + power * 0.35})`;
+        ctx.lineWidth = 5;
+        ctx.setLineDash([10, 9]);
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(targetX, targetY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const angle = Math.atan2(-pull.y, -pull.x);
+        ctx.translate(targetX, targetY);
+        ctx.rotate(angle);
+        ctx.fillStyle = "rgba(255, 218, 121, 0.9)";
+        ctx.beginPath();
+        ctx.moveTo(18, 0);
+        ctx.lineTo(-8, -10);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-8, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 247, 231, 0.36)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.r + 12 + power * 15, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawActor(actor) {
+        if (!actor.alive) return;
+
+        const flash = actor.invuln > 0 && Math.floor(actor.invuln * 24) % 2 === 0;
+        const speed = Math.hypot(actor.vx, actor.vy);
+        const stretch = Math.min(0.18, speed / 4200) + actor.squash * 0.12;
+
+        ctx.save();
+        ctx.translate(actor.x, actor.y);
+        ctx.rotate(actor.angle);
+        ctx.scale(1 + stretch, 1 - stretch * 0.7);
+
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = actor.color;
+        ctx.globalAlpha = flash ? 0.45 : 1;
+        if (actor.image.complete && actor.image.naturalWidth > 0) {
+          ctx.drawImage(actor.image, -actor.r, -actor.r, actor.r * 2, actor.r * 2);
+        } else {
+          ctx.fillStyle = actor.color;
+          ctx.beginPath();
+          ctx.arc(0, 0, actor.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
+        if (actor.attackTimer > 0) {
+          const pulse = 1 + Math.sin(performance.now() / 70) * 0.08;
+          ctx.save();
+          ctx.strokeStyle = actor.type === "player" ? "rgba(102, 240, 177, 0.52)" : "rgba(255, 118, 103, 0.48)";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(actor.x, actor.y, (actor.r + 10) * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (actor.type === "enemy" && actor.alive) {
+          drawSmallHp(actor);
+        }
+      }
+
+      function drawSmallHp(actor) {
+        const w = actor.r * 1.8;
+        const h = 6;
+        const x = actor.x - w / 2;
+        const y = actor.y - actor.r - 18;
+        ctx.fillStyle = "rgba(20, 12, 14, 0.72)";
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = actor.color;
+        ctx.fillRect(x, y, w * (actor.hp / actor.maxHp), h);
+      }
+
+      function drawProjectiles() {
+        for (const shot of state.projectiles) {
+          ctx.save();
+          ctx.shadowBlur = 18;
+          ctx.shadowColor = shot.color;
+          ctx.fillStyle = shot.color;
+          ctx.beginPath();
+          ctx.arc(shot.x, shot.y, shot.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 247, 231, 0.65)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      function drawParticles() {
+        for (const p of state.dust) {
+          const alpha = Math.max(0, p.life / p.max);
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 - alpha * 0.35), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function getPointerPosition(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
+      }
+
+      function canControlPlayer() {
+        return state.running && player.alive && player.cooldown <= 0;
+      }
+
+      function getPullVector() {
+        let x = state.dragNow.x - state.dragStart.x;
+        let y = state.dragNow.y - state.dragStart.y;
+        const length = Math.hypot(x, y);
+        if (length > config.maxPull) {
+          const ratio = config.maxPull / length;
+          x *= ratio;
+          y *= ratio;
+        }
+        return { x, y };
+      }
+
+      function pointerDown(event) {
+        if (!canControlPlayer()) return;
+
+        const pos = getPointerPosition(event);
+        canvas.setPointerCapture(event.pointerId);
+        state.dragging = true;
+        state.pointerId = event.pointerId;
+        state.dragStart = pos;
+        state.dragNow = pos;
+      }
+
+      function pointerMove(event) {
+        if (!state.dragging || event.pointerId !== state.pointerId) return;
+        state.dragNow = getPointerPosition(event);
+      }
+
+      function pointerUp(event) {
+        if (!state.dragging || event.pointerId !== state.pointerId) return;
+
+        const pull = getPullVector();
+        const power = Math.hypot(pull.x, pull.y);
+        if (power > 12) {
+          player.vx = player.vx * 0.28 - pull.x * config.slingPower;
+          player.vy = player.vy * 0.28 - pull.y * config.slingPower;
+          player.cooldown = 0.34;
+          player.attackTimer = config.attackWindow;
+          player.squash = 1;
+          spawnDust(player.x, player.y, player.color, 14);
+          setStatus("SLING", `威力 ${Math.round((power / config.maxPull) * 100)}%`);
+        }
+
+        state.dragging = false;
+        state.pointerId = null;
+      }
+
+      function updateHud() {
+        playerHpText.textContent = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+        enemyHpText.textContent = `${Math.ceil(enemy.hp)} / ${enemy.maxHp}`;
+        enemyName.textContent = currentStage().name;
+        playerHpBar.style.width = `${clamp(player.hp / player.maxHp, 0, 1) * 100}%`;
+        enemyHpBar.style.width = `${clamp(enemy.hp / enemy.maxHp, 0, 1) * 100}%`;
+      }
+
+      function setStatus(title, text) {
+        statusTitle.textContent = title;
+        statusText.textContent = text;
+        state.messageTimer = 1.8;
+      }
+
+      function flashMessage(title, text) {
+        setStatus(title, text);
+      }
+
+      function keepInside(actor) {
+        actor.x = clamp(actor.x || actor.r + 12, actor.r + 12, state.width - actor.r - 12);
+        actor.y = clamp(actor.y || actor.r + 12, actor.r + 12, state.height - actor.r - 12);
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function randomBetween(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function seededRandom(seed) {
+        let t = seed;
+        return () => {
+          t += 0x6D2B79F5;
+          let r = Math.imul(t ^ (t >>> 15), 1 | t);
+          r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+          return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function playMusic() {
+        state.musicReady = true;
+        bgm.play().catch(() => {
+          state.musicReady = false;
+          setStatus("SOUND READY", "ブラウザの音声許可後にBGMが再生されます。");
+        });
+      }
+
+      function pauseMusic() {
+        bgm.pause();
+      }
+
+      function handleStartButton() {
+        playMusic();
+
+        if (state.pendingNext) {
+          state.stageIndex += 1;
+          resetGame();
+          return;
+        }
+
+        if (state.over && !enemy.alive && state.stageIndex === stages.length - 1) {
+          state.stageIndex = 0;
+        }
+
+        resetGame();
+      }
+
+      window.addEventListener("resize", resize);
+      canvas.addEventListener("pointerdown", pointerDown);
+      canvas.addEventListener("pointermove", pointerMove);
+      canvas.addEventListener("pointerup", pointerUp);
+      canvas.addEventListener("pointercancel", pointerUp);
+      startButton.addEventListener("click", handleStartButton);
+
+      resize();
+      placePreviewActors();
+      updateHud();
+      requestAnimationFrame(update);
+    })();
+  </script>
+</body>
+</html>

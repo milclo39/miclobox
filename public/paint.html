@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>miclobox</title>
+    <link rel="icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+    <!-- Tone.js (タイマー音声用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+            background: #333;
+            font-family: sans-serif;
+            user-select: none;
+        }
+        
+        #viewport {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #333;
+        }
+        #zoom-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+        }
+        #bgCanvas { z-index: 0; background: white; }
+        #drawCanvas { z-index: 1; background: transparent; }
+
+        /* UIスタイル */
+        button {
+            width: 44px; height: 44px; font-size: 20px; cursor: pointer; border: none; border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9); box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s; outline: none;
+        }
+        button:active { transform: scale(0.92); }
+        button.active-tool { background: #3b82f6; color: white; }
+        button.bg-active { background: #10b981; color: white; }
+        button.zoom-active { background: #f59e0b; color: white; box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px rgba(245, 158, 11, 0.5); }
+        button.timer-active { background: #8b5cf6; color: white; }
+
+        .controls { position: fixed; top: 15px; left: 15px; z-index: 100; display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        .popup-panel {
+            position: fixed; top: 70px; left: 15px; z-index: 99;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
+            padding: 12px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            display: none; flex-direction: column; gap: 12px;
+            width: fit-content; max-width: 90vw; max-height: 80vh; overflow-y: auto;
+        }
+        .popup-panel.show { display: flex; }
+        .setting-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+        .bg-option-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; background: white; border: 1px solid #ddd; color: #444; border-radius: 6px; width: auto; }
+        .bg-option-btn.selected { background: #10b981; color: white; border-color: #10b981; }
+        
+        /* 解像度ボタン用 */
+        .res-btn {
+            padding: 6px 10px; font-size: 12px; font-weight: bold; background: white; border: 1px solid #ddd; 
+            color: #444; border-radius: 4px; width: auto; height: auto;
+        }
+        .res-btn:hover { background: #f3f4f6; }
+        .res-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+        
+        .color-btn { width: 28px; height: 28px; border-radius: 50%; padding: 0; border: 2px solid transparent; }
+        .color-btn.selected { border-color: #555; transform: scale(1.15); }
+        .size-btn { width: 36px; height: 36px; background: transparent; border: 1px solid #eee; }
+        .size-btn.selected { background: #eef2ff; border-color: #3b82f6; }
+        .dot { background: #333; border-radius: 50%; display: block; }
+        .opacity-btn { width: auto; padding: 0 8px; font-size: 12px; font-weight: bold; height: 32px; background: white; border: 1px solid #ddd; color: #666; }
+        .opacity-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+
+        .media-controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 25px; }
+        #snap-btn, #record-btn { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #record-btn .icon { width: 26px; height: 26px; background: #ef4444; border-radius: 50%; transition: all 0.3s; }
+        #record-btn.recording { border: 4px solid rgba(239,68,68,0.3); background: white; }
+        #record-btn.recording .icon { border-radius: 4px; transform: scale(0.6); }
+
+        #zoom-controls {
+            position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 98;
+            width: 80%; max-width: 400px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
+            padding: 10px 20px; border-radius: 20px; display: none; align-items: center; gap: 10px;
+            color: white; font-weight: bold; font-size: 14px;
+        }
+        #zoom-controls.show { display: flex; }
+        input[type=range] { flex: 1; height: 6px; -webkit-appearance: none; background: rgba(255,255,255,0.3); border-radius: 3px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+        /* --- タイマーウィジェット用のスタイル (Compact & Integrated) --- */
+        #timer-widget {
+            position: fixed;
+            top: 80px; left: 80px;
+            z-index: 200;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(4px);
+            border-radius: 50%; /* 円形ベースに */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            display: none;
+            width: 180px;  /* ウィンドウサイズ */
+            height: 180px; /* 正方形 */
+            cursor: grab;
+        }
+        #timer-widget.show { display: block; }
+        #timer-widget:active { cursor: grabbing; }
+
+        /* SVGを背景いっぱいに */
+        .timer-svg-container {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        /* コンテンツ（文字とボタン）を中央配置 */
+        .timer-content {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none; /* ドラッグを妨げない */
+        }
+
+        .timer-text {
+            font-size: 36px; /* 文字大きく */
+            font-weight: 800; 
+            color: #333;
+            font-family: 'Courier New', monospace;
+            letter-spacing: -1px;
+            margin-bottom: 5px; /* ボタンとの間隔 */
+            margin-top: -10px;  /* 少し上寄りに */
+            text-shadow: 0 2px 0 rgba(255,255,255,0.8);
+        }
+
+        .timer-controls {
+            display: flex; gap: 12px;
+            pointer-events: auto; /* ボタンは押せるように */
+        }
+
+        .timer-btn {
+            width: 36px; height: 36px; font-size: 16px; border-radius: 50%;
+            background: #f3f4f6; color: #555;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .timer-btn.primary { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .timer-btn:active { transform: scale(0.95); }
+
+        /* 入力欄（再生中は消す） */
+        .timer-inputs {
+            position: absolute;
+            bottom: 25px; /* 円の下部 */
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 4px; align-items: center;
+            pointer-events: auto;
+            background: rgba(255,255,255,0.9);
+            padding: 2px 6px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        .timer-inputs.hidden-mode {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-50%) scale(0.9);
+        }
+
+        .timer-input {
+            width: 36px; padding: 2px; text-align: center; font-size: 14px;
+            border: 1px solid #ddd; border-radius: 4px; background: transparent;
+            outline: none; font-weight: bold; color: #444;
+        }
+        .timer-input:focus { border-color: #3b82f6; background: white; }
+        .timer-separator { font-weight: bold; color: #999; font-size: 12px; }
+        
+        /* ドラッグハンドルラベル */
+        .timer-handle-label {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            text-align: center;
+            font-size: 9px; color: #aaa; 
+            font-weight:bold; 
+            text-transform:uppercase; 
+            letter-spacing:1px;
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <button id="zoom-mode-btn" title="ズームモード切替">🔍</button>
+    <button id="bg-menu-btn" title="背景設定">🖼️</button>
+    <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
+    <button id="eraser-btn" title="消しゴム">🧼</button>
+    <button id="undo-btn" title="元に戻す">↩️</button>
+    <button id="clear-btn" title="全消去">🗑️</button>
+    <button id="timer-toggle-btn" title="タイマー">⏱️</button>
+</div>
+
+<div id="timer-widget">
+    <!-- 背景の円 -->
+    <div class="timer-svg-container">
+        <svg style="width:100%; height:100%;" viewBox="0 0 100 100">
+            <!-- 背景円 -->
+            <circle cx="50" cy="50" r="48" fill="rgba(255,255,255,0.5)" stroke="#eee" stroke-width="3" />
+            <!-- プログレス円 -->
+            <circle id="timer-ring" cx="50" cy="50" r="48" fill="transparent" stroke="#3b82f6" stroke-width="3" 
+                    stroke-dasharray="301.6" stroke-dashoffset="301.6" stroke-linecap="round" 
+                    transform="rotate(-90 50 50)" style="transition: stroke-dashoffset 0.1s linear;" />
+        </svg>
+    </div>
+
+    <!-- ラベル -->
+    <div class="timer-handle-label">Timer</div>
+
+    <!-- コンテンツ -->
+    <div class="timer-content">
+        <!-- 時間表示 -->
+        <div id="timer-time-text" class="timer-text">03:00</div>
+        
+        <!-- 操作ボタン -->
+        <div class="timer-controls">
+            <button id="timer-start-btn" class="timer-btn primary">▶</button>
+            <button id="timer-reset-btn" class="timer-btn">↺</button>
+        </div>
+    </div>
+
+    <!-- 入力欄 (下部にオーバーレイ) -->
+    <div id="timer-inputs-container" class="timer-inputs">
+        <input id="timer-min" type="number" min="0" max="99" value="3" class="timer-input">
+        <span class="timer-separator">:</span>
+        <input id="timer-sec" type="number" min="0" max="59" value="0" class="timer-input">
+    </div>
+</div>
+
+<div id="zoom-controls">
+    <span id="zoom-text">100%</span>
+    <input type="range" id="zoom-slider" min="100" max="1000" value="100" step="10">
+</div>
+
+<div id="bg-settings" class="popup-panel">
+    <div class="setting-group">
+        <button class="bg-option-btn selected" id="bg-none-btn">なし (白)</button>
+        <button class="bg-option-btn" id="bg-image-btn">画像を選択</button>
+    </div>
+    
+    <div class="setting-group" id="camera-list-container" style="display:none; flex-direction:column; align-items:flex-start;">
+        </div>
+
+    <div class="setting-group" style="display:flex; flex-direction:column; align-items:flex-start; margin-top:5px; border-top:1px solid #eee; padding-top:10px;">
+        <div style="width:100%; font-size:12px; color:#666; margin-bottom:5px; display:flex; justify-content:space-between;">
+            <span>解像度設定:</span>
+            <span id="current-res-info" style="color:#3b82f6; font-weight:bold;">-</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px;">
+            <button class="res-btn selected" data-w="" data-h="">未指定</button>
+            <button class="res-btn" data-w="640" data-h="480">640x480</button>
+            <button class="res-btn" data-w="720" data-h="480">720x480</button>
+            <button class="res-btn" data-w="1280" data-h="720">1280x720</button>
+            <button class="res-btn" data-w="1280" data-h="960">1280x960</button>
+            <button class="res-btn" data-w="1920" data-h="1080">1920x1080</button>
+            <button class="res-btn" data-w="3840" data-h="2160">3840x2160</button>
+        </div>
+    </div>
+</div>
+
+<div id="pen-settings" class="popup-panel">
+    <div class="setting-group" id="color-options"></div>
+    <div class="setting-group">
+        <button class="size-btn selected" data-size="5"><span class="dot" style="width:6px; height:6px;"></span></button>
+        <button class="size-btn" data-size="10"><span class="dot" style="width:12px; height:12px;"></span></button>
+        <button class="size-btn" data-size="20"><span class="dot" style="width:18px; height:18px;"></span></button>
+        <button class="size-btn" data-size="40"><span class="dot" style="width:24px; height:24px;"></span></button>
+    </div>
+    <div class="setting-group">
+        <button class="opacity-btn selected" data-alpha="1.0">100%</button>
+        <button class="opacity-btn" data-alpha="0.75">75%</button>
+        <button class="opacity-btn" data-alpha="0.5">50%</button>
+        <button class="opacity-btn" data-alpha="0.25">25%</button>
+    </div>
+</div>
+
+<input type="file" id="image-uploader" accept="image/*" style="display: none;">
+
+<div class="media-controls">
+    <button id="snap-btn" title="画像を保存">📸</button>
+    <button id="record-btn" title="録画開始/停止"><div class="icon"></div></button>
+</div>
+
+<div id="viewport">
+    <div id="zoom-container">
+        <canvas id="bgCanvas"></canvas>
+        <canvas id="drawCanvas"></canvas>
+    </div>
+</div>
+
+<video id="video-feed" playsinline autoplay muted style="display:none;"></video>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("sw_ok"))
+            .catch(err => console.error("sw_err:", err));
+    }
+
+    const STORAGE_KEY = 'ar_drawing_data_v8'; 
+    const colors = [
+        { code: '#000000' }, { code: '#FFFFFF' }, { code: '#EF4444' }, { code: '#F97316' },
+        { code: '#EAB308' }, { code: '#22C55E' }, { code: '#3B82F6' }, { code: '#A855F7' }
+    ];
+
+    let state = {
+        tool: 'pen', hexColor: '#000000', size: 5, alpha: 1.0, 
+        bgMode: 'white',
+        cameraResolution: null, // { width, height } or null
+        currentDeviceId: null,
+        isTimerVisible: false
+    };
+    
+    let zoomState = {
+        active: false, scale: 1.0, translateX: 0, translateY: 0,
+        isDragging: false, lastX: 0, lastY: 0, initialPinchDist: 0, initialScale: 1.0
+    };
+
+    let activePointers = new Map();
+    let paths = [];
+    
+    let videoStream = null;
+    let backgroundImage = null;
+    let animationId = null;
+    let isBgLoopRunning = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+
+    const viewport = document.getElementById('viewport');
+    const zoomContainer = document.getElementById('zoom-container');
+    const drawCanvas = document.getElementById('drawCanvas');
+    const bgCanvas = document.getElementById('bgCanvas');
+    const drawCtx = drawCanvas.getContext('2d');
+    const bgCtx = bgCanvas.getContext('2d');
+    const recCanvas = document.createElement('canvas');
+    const recCtx = recCanvas.getContext('2d');
+    const video = document.getElementById('video-feed');
+    
+    const penSettingsPanel = document.getElementById('pen-settings');
+    const bgSettingsPanel = document.getElementById('bg-settings');
+    const imageUploader = document.getElementById('image-uploader');
+    const cameraListContainer = document.getElementById('camera-list-container');
+    const currentResInfo = document.getElementById('current-res-info');
+    
+    const zoomModeBtn = document.getElementById('zoom-mode-btn');
+    const zoomControls = document.getElementById('zoom-controls');
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomText = document.getElementById('zoom-text');
+
+    // Timer Elements
+    const timerWidget = document.getElementById('timer-widget');
+    const timerToggleBtn = document.getElementById('timer-toggle-btn');
+    const timerMinInput = document.getElementById('timer-min');
+    const timerSecInput = document.getElementById('timer-sec');
+    const timerTimeText = document.getElementById('timer-time-text');
+    const timerRing = document.getElementById('timer-ring');
+    const timerStartBtn = document.getElementById('timer-start-btn');
+    const timerResetBtn = document.getElementById('timer-reset-btn');
+    const timerInputsContainer = document.getElementById('timer-inputs-container');
+
+    // Timer Logic Variables
+    let tInterval = null;
+    let tTotalSeconds = 0;
+    let tRemainingSeconds = 0;
+    let tIsPaused = true;
+    const tCircumference = 2 * Math.PI * 48;
+
+    function init() {
+        resize();
+        window.addEventListener('resize', resize);
+        createColorButtons();
+        setupEventListeners();
+        loadFromStorage();
+        if (state.bgMode === 'camera') {
+            startCameraStream(state.currentDeviceId);
+        } else {
+            drawStaticBackground();
+        }
+        initTimer();
+    }
+
+    function resize() {
+        const w = window.innerWidth, h = window.innerHeight;
+        drawCanvas.width = w; drawCanvas.height = h;
+        bgCanvas.width = w; bgCanvas.height = h;
+        recCanvas.width = w; recCanvas.height = h;
+        zoomContainer.style.width = `${w}px`;
+        zoomContainer.style.height = `${h}px`;
+        redrawLines();
+        if (!isBgLoopRunning) drawStaticBackground();
+        if (zoomState.active) toggleZoomMode(); 
+    }
+
+    function setupEventListeners() {
+		document.getElementById('pen-tool-btn').onclick = () => {
+	        if (state.tool === 'pen') {
+	            // 既にペンの場合：設定パネルを開閉
+	            if(zoomState.active) return;
+	            bgSettingsPanel.classList.remove('show');
+	            penSettingsPanel.classList.toggle('show');
+	        } else {
+	            // 他のツールの場合：ペンに切り替え（switchToPen内でパネルも開く）
+	            switchToPen();
+	        }
+	    };
+        document.getElementById('eraser-btn').onclick = switchToEraser;
+		document.getElementById('bg-menu-btn').onclick = async (e) => {
+	        e.stopPropagation();
+	        if(zoomState.active) return;
+	        penSettingsPanel.classList.remove('show');
+	        bgSettingsPanel.classList.toggle('show');
+	        if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
+	    };
+
+        // Timer Toggle
+        timerToggleBtn.onclick = (e) => {
+            e.stopPropagation();
+            state.isTimerVisible = !state.isTimerVisible;
+            if(state.isTimerVisible) {
+                timerWidget.classList.add('show');
+                timerToggleBtn.classList.add('timer-active');
+            } else {
+                timerWidget.classList.remove('show');
+                timerToggleBtn.classList.remove('timer-active');
+            }
+        };
+
+        zoomModeBtn.onclick = toggleZoomMode;
+        zoomSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            setZoomLevel(val / 100);
+        });
+
+        document.getElementById('bg-none-btn').onclick = () => setBackgroundMode('white');
+        document.getElementById('bg-image-btn').onclick = () => imageUploader.click();
+        
+        // 解像度ボタン
+        document.querySelectorAll('.res-btn').forEach(btn => {
+            btn.onclick = () => {
+                // UI選択更新
+                document.querySelectorAll('.res-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+
+                // 設定更新
+                const w = btn.dataset.w;
+                const h = btn.dataset.h;
+                if (w && h) {
+                    state.cameraResolution = { width: parseInt(w), height: parseInt(h) };
+                } else {
+                    state.cameraResolution = null; // 未指定
+                }
+
+                // カメラモード中なら再起動
+                if (state.bgMode === 'camera') {
+                    startCameraStream(state.currentDeviceId);
+                }
+            };
+        });
+
+        imageUploader.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const img = new Image();
+                img.onload = () => { backgroundImage = img; setBackgroundMode('image'); };
+                img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        document.getElementById('undo-btn').onclick = undo;
+        document.getElementById('clear-btn').onclick = clearAll;
+        document.getElementById('snap-btn').onclick = takeSnapshot;
+        document.getElementById('record-btn').onclick = toggleRecording;
+
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.onclick = () => { state.size = parseInt(btn.dataset.size); updateUISelection('.size-btn', btn); };
+        });
+        document.querySelectorAll('.opacity-btn').forEach(btn => {
+            btn.onclick = () => { state.alpha = parseFloat(btn.dataset.alpha); updateUISelection('.opacity-btn', btn); };
+        });
+
+        viewport.addEventListener('pointerdown', handlePointerDown);
+        viewport.addEventListener('pointermove', handlePointerMove);
+        viewport.addEventListener('pointerup', handlePointerUp);
+        viewport.addEventListener('pointercancel', handlePointerUp);
+        
+        viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+        viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+        viewport.addEventListener('touchend', handleTouchEnd);
+        
+        // Timer Drag Logic Setup
+        setupTimerDrag();
+    }
+
+    // --- Timer Logic ---
+    function initTimer() {
+        timerMinInput.addEventListener('input', updateTimerFromInput);
+        timerSecInput.addEventListener('input', updateTimerFromInput);
+        
+        // Stop bubbling so drawing doesn't happen when interacting with timer inputs
+        [timerMinInput, timerSecInput, timerStartBtn, timerResetBtn].forEach(el => {
+            el.addEventListener('pointerdown', (e) => e.stopPropagation());
+            el.addEventListener('touchstart', (e) => e.stopPropagation());
+        });
+
+        timerStartBtn.onclick = (e) => { e.stopPropagation(); toggleTimer(); };
+        timerResetBtn.onclick = (e) => { e.stopPropagation(); resetTimer(); };
+        
+        updateTimerFromInput();
+    }
+
+    function updateTimerFromInput() {
+        if (!tIsPaused) return;
+        const m = parseInt(timerMinInput.value) || 0;
+        const s = parseInt(timerSecInput.value) || 0;
+        tTotalSeconds = m * 60 + s;
+        tRemainingSeconds = tTotalSeconds;
+        updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+        const m = Math.floor(tRemainingSeconds / 60);
+        const s = tRemainingSeconds % 60;
+        timerTimeText.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        
+        // Ring
+        if (tTotalSeconds === 0) {
+            timerRing.style.strokeDashoffset = tCircumference;
+        } else {
+            const offset = tCircumference - (tRemainingSeconds / tTotalSeconds) * tCircumference;
+            timerRing.style.strokeDashoffset = offset;
+        }
+    }
+
+    function toggleTimer() {
+        if (tIsPaused) {
+            // Start
+            if (Tone.context.state !== 'running') Tone.start();
+            
+            if (tRemainingSeconds === 0) {
+                // If 0, do nothing or maybe reset logic? Let's just return if 0 total
+                if (tTotalSeconds === 0) return;
+                tRemainingSeconds = tTotalSeconds; // Restart if finished
+            }
+
+            tIsPaused = false;
+            timerStartBtn.textContent = '⏸';
+            timerInputsContainer.classList.add('hidden-mode');
+            
+            tInterval = setInterval(() => {
+                if (tRemainingSeconds > 0) {
+                    tRemainingSeconds--;
+                    updateTimerDisplay();
+                } else {
+                    finishTimer();
+                }
+            }, 1000);
+        } else {
+            // Pause
+            clearInterval(tInterval);
+            tIsPaused = true;
+            timerStartBtn.textContent = '▶';
+			timerInputsContainer.classList.remove('hidden-mode');
+        }
+    }
+
+    function resetTimer() {
+        clearInterval(tInterval);
+        tIsPaused = true;
+        timerStartBtn.textContent = '▶';
+        timerInputsContainer.classList.remove('hidden-mode');
+        updateTimerFromInput();
+    }
+
+    function finishTimer() {
+        clearInterval(tInterval);
+        tIsPaused = true;
+        timerStartBtn.textContent = '▶';
+        timerInputsContainer.classList.remove('hidden-mode');
+        // Play Sound
+        if (typeof Tone !== 'undefined') {
+            const synth = new Tone.Synth().toDestination();
+            const now = Tone.now();
+            synth.triggerAttackRelease("C5", "8n", now);
+            synth.triggerAttackRelease("E5", "8n", now + 0.15);
+            synth.triggerAttackRelease("G5", "8n", now + 0.3);
+            synth.triggerAttackRelease("C6", "4n", now + 0.45);
+        }
+    }
+    
+    // --- Timer Drag Logic ---
+    function setupTimerDrag() {
+        let isDragging = false;
+        let dragOffsetX = 0, dragOffsetY = 0;
+        
+        const onDragStart = (e) => {
+            // Check if target is input or button
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            
+            isDragging = true;
+            e.stopPropagation(); // Prevent drawing
+            
+            // Get pointer position
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const rect = timerWidget.getBoundingClientRect();
+            dragOffsetX = clientX - rect.left;
+            dragOffsetY = clientY - rect.top;
+            
+            // Capture pointer if not touch (touch handled by touchmove)
+            if (!e.touches) {
+                timerWidget.setPointerCapture(e.pointerId);
+            }
+        };
+        
+        const onDragMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const x = clientX - dragOffsetX;
+            const y = clientY - dragOffsetY;
+            
+            timerWidget.style.left = `${x}px`;
+            timerWidget.style.top = `${y}px`;
+        };
+        
+        const onDragEnd = (e) => {
+            if (isDragging) {
+                isDragging = false;
+                if (!e.touches) timerWidget.releasePointerCapture(e.pointerId);
+            }
+        };
+
+        timerWidget.addEventListener('pointerdown', onDragStart);
+        timerWidget.addEventListener('pointermove', onDragMove);
+        timerWidget.addEventListener('pointerup', onDragEnd);
+        timerWidget.addEventListener('touchstart', onDragStart, {passive: false});
+        timerWidget.addEventListener('touchmove', onDragMove, {passive: false});
+        timerWidget.addEventListener('touchend', onDragEnd);
+    }
+
+    // --- ズーム制御 ---
+    function toggleZoomMode() {
+        zoomState.active = !zoomState.active;
+        if (zoomState.active) {
+            zoomModeBtn.classList.add('zoom-active'); zoomControls.classList.add('show');
+            penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show');
+            setZoomLevel(1.0);
+        } else {
+            zoomModeBtn.classList.remove('zoom-active'); zoomControls.classList.remove('show');
+            setZoomLevel(1.0); zoomState.translateX = 0; zoomState.translateY = 0; updateTransform();
+        }
+    }
+    function setZoomLevel(newScale, center = null) {
+        newScale = Math.min(Math.max(newScale, 1.0), 10.0);
+        if (!center) center = { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 };
+        const oldScale = zoomState.scale;
+        const contentX = (center.x - zoomState.translateX) / oldScale;
+        const contentY = (center.y - zoomState.translateY) / oldScale;
+        zoomState.scale = newScale;
+        zoomState.translateX = center.x - (contentX * newScale);
+        zoomState.translateY = center.y - (contentY * newScale);
+        zoomSlider.value = Math.round(zoomState.scale * 100);
+        zoomText.innerText = zoomSlider.value + '%';
+        clampTranslation(); updateTransform();
+    }
+    function clampTranslation() {
+        const w = viewport.clientWidth, h = viewport.clientHeight;
+        const scaledW = w * zoomState.scale, scaledH = h * zoomState.scale;
+        const minX = w - scaledW, minY = h - scaledH;
+        zoomState.translateX = Math.min(0, Math.max(zoomState.translateX, minX));
+        zoomState.translateY = Math.min(0, Math.max(zoomState.translateY, minY));
+    }
+    function updateTransform() {
+        zoomContainer.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+    }
+    function getDistance(touches) { return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); }
+    function getCenter(touches) { return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 }; }
+    function handleTouchStart(e) { if (!zoomState.active) return; if (e.touches.length === 2) { e.preventDefault(); zoomState.isDragging = false; zoomState.initialPinchDist = getDistance(e.touches); zoomState.initialScale = zoomState.scale; } }
+    function handleTouchMove(e) { if (!zoomState.active) return; if (e.touches.length === 2) { e.preventDefault(); const dist = getDistance(e.touches); if (zoomState.initialPinchDist > 0) { const newScale = zoomState.initialScale * (dist / zoomState.initialPinchDist); const center = getCenter(e.touches); setZoomLevel(newScale, center); } } }
+    function handleTouchEnd(e) {}
+    function handlePointerDown(e) {
+        // Prevent drawing if touching controls
+        if (e.target.closest('.controls') || e.target.closest('.popup-panel') || e.target.closest('#zoom-controls') || e.target.closest('#timer-widget')) return;
+
+        if (!zoomState.active) { penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
+        if (zoomState.active) {
+            if (zoomState.scale > 1.0) { zoomState.isDragging = true; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; viewport.setPointerCapture(e.pointerId); }
+        } else {
+            e.preventDefault(); const drawColor = getRgbaColor(state.hexColor, state.alpha);
+            const newPath = { id: e.pointerId, points: [{x: e.clientX, y: e.clientY}], tool: state.tool, color: drawColor, width: state.tool === 'eraser' ? 25 : state.size };
+            activePointers.set(e.pointerId, newPath); viewport.setPointerCapture(e.pointerId); redrawLines();
+        }
+    }
+    function handlePointerMove(e) {
+        if (zoomState.active) {
+            if (zoomState.isDragging) { const dx = e.clientX - zoomState.lastX; const dy = e.clientY - zoomState.lastY; zoomState.translateX += dx; zoomState.translateY += dy; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; clampTranslation(); updateTransform(); }
+        } else {
+            if (!activePointers.has(e.pointerId)) return; const path = activePointers.get(e.pointerId); path.points.push({x: e.clientX, y: e.clientY}); redrawLines();
+        }
+    }
+    function handlePointerUp(e) {
+        if (zoomState.active) { zoomState.isDragging = false; }
+        else { if (activePointers.has(e.pointerId)) { const path = activePointers.get(e.pointerId); paths.push(path); activePointers.delete(e.pointerId); viewport.releasePointerCapture(e.pointerId); redrawLines(); saveToStorage(); } }
+    }
+
+    // --- 背景・カメラ制御 ---
+    function setBackgroundMode(mode, cameraDeviceId = null) {
+        state.bgMode = mode;
+        document.getElementById('bg-none-btn').classList.toggle('selected', mode === 'white');
+        document.getElementById('bg-image-btn').classList.toggle('selected', mode === 'image');
+        document.querySelectorAll('.camera-select-btn').forEach(b => b.classList.remove('selected'));
+
+        if (mode === 'white' || mode === 'image') {
+            stopCameraStream();
+            document.getElementById('bg-menu-btn').classList.remove('bg-active');
+            isBgLoopRunning = false; cancelAnimationFrame(animationId);
+            drawStaticBackground();
+            currentResInfo.innerText = "-"; // 情報リセット
+            if(isRecording) startBackgroundLoop();
+        } else if (mode === 'camera') {
+            document.getElementById('bg-menu-btn').classList.add('bg-active');
+            startCameraStream(cameraDeviceId);
+        }
+    }
+    async function refreshCameraList() {
+        try {
+            if(!videoStream) { const t = await navigator.mediaDevices.getUserMedia({video:true}); t.getTracks().forEach(k=>k.stop()); }
+            const devs = await navigator.mediaDevices.enumerateDevices();
+            const vDevs = devs.filter(d => d.kind === 'videoinput');
+            cameraListContainer.innerHTML = '<div style="width:100%; font-size:12px; color:#666; margin-bottom:5px;">カメラを選択:</div>';
+            cameraListContainer.style.display = 'flex';
+            vDevs.forEach((d, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'bg-option-btn camera-select-btn';
+                btn.textContent = d.label || `カメラ ${i+1}`;
+                btn.onclick = () => { 
+                    setBackgroundMode('camera', d.deviceId); 
+                    document.querySelectorAll('.camera-select-btn').forEach(b=>b.classList.remove('selected')); 
+                    btn.classList.add('selected'); 
+                };
+                if(state.bgMode === 'camera' && state.currentDeviceId === d.deviceId) btn.classList.add('selected');
+                cameraListContainer.appendChild(btn);
+            });
+        } catch(e) { cameraListContainer.style.display='none'; }
+    }
+
+    async function startCameraStream(deviceId) {
+        // 現在のデバイスIDを記憶
+        state.currentDeviceId = deviceId;
+        
+        stopCameraStream(); // リスタート
+        
+        // 制約の作成 (解像度が指定されていれば追加)
+        const constraints = {
+            video: {
+                deviceId: deviceId ? { exact: deviceId } : undefined,
+                facingMode: deviceId ? undefined : 'environment'
+            },
+            audio: false
+        };
+
+        if (state.cameraResolution) {
+            constraints.video.width = { ideal: state.cameraResolution.width };
+            constraints.video.height = { ideal: state.cameraResolution.height };
+        }
+
+        try {
+            videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = videoStream;
+            
+            // 再生開始を待つ
+            await video.play();
+            
+            // 実際に適用された解像度を表示
+            setTimeout(() => {
+                if(video.videoWidth) {
+                    currentResInfo.innerText = `現在: ${video.videoWidth}x${video.videoHeight}`;
+                }
+            }, 500);
+
+            startBackgroundLoop();
+        } catch(e) { 
+            alert("カメラエラー: " + e.message); 
+            setBackgroundMode('white'); 
+        }
+    }
+    
+    function stopCameraStream() { if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; } video.srcObject=null; }
+    function startBackgroundLoop() { if(!isBgLoopRunning){ isBgLoopRunning=true; renderBackgroundLoop(); } }
+    function renderBackgroundLoop() { if(state.bgMode!=='camera' && !isRecording) { isBgLoopRunning=false; return; } drawStaticBackground(); animationId = requestAnimationFrame(renderBackgroundLoop); }
+    
+    function drawStaticBackground() {
+        const w = bgCanvas.width, h = bgCanvas.height;
+        if(state.bgMode==='white') { bgCtx.fillStyle='white'; bgCtx.fillRect(0,0,w,h); }
+        else if(state.bgMode==='image' && backgroundImage) {
+            bgCtx.fillStyle='#f0f0f0'; bgCtx.fillRect(0,0,w,h);
+            const scale = Math.min(w/backgroundImage.width, h/backgroundImage.height);
+            const dw = backgroundImage.width*scale, dh = backgroundImage.height*scale;
+            bgCtx.drawImage(backgroundImage, (w-dw)/2, (h-dh)/2, dw, dh);
+        } else if(state.bgMode==='camera' && video.readyState===4) {
+            const scale = Math.max(w/video.videoWidth, h/video.videoHeight);
+            const dw = video.videoWidth*scale, dh = video.videoHeight*scale;
+            bgCtx.drawImage(video, (w-dw)/2, (h-dh)/2, dw, dh);
+        }
+        if(isRecording) { recCtx.drawImage(bgCanvas,0,0); recCtx.drawImage(drawCanvas,0,0); }
+    }
+
+    // --- その他ヘルパー ---
+    function getRgbaColor(hex, alpha) { const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${alpha})`; }
+    function redrawLines() { drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); drawCtx.lineCap='round'; drawCtx.lineJoin='round'; paths.forEach(p=>drawPath(p)); activePointers.forEach(p=>drawPath(p)); }
+    function drawPath(path) {
+        const p = path.points; if(p.length<1) return;
+        drawCtx.save(); drawCtx.lineWidth=path.width;
+        if(path.tool==='eraser') drawCtx.globalCompositeOperation='destination-out';
+        else { drawCtx.globalCompositeOperation='source-over'; drawCtx.strokeStyle=path.color; }
+        drawCtx.beginPath();
+        if(p.length===1) { drawCtx.arc(p[0].x,p[0].y,path.width/2,0,Math.PI*2); if(path.tool!=='eraser') drawCtx.fillStyle=path.color; drawCtx.fill(); }
+        else {
+            drawCtx.moveTo(p[0].x,p[0].y);
+            if(p.length<3) for(let i=1;i<p.length;i++) drawCtx.lineTo(p[i].x,p[i].y);
+            else { for(let i=1;i<p.length-2;i++) { const xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2; drawCtx.quadraticCurveTo(p[i].x,p[i].y,xc,yc); } drawCtx.quadraticCurveTo(p[p.length-2].x,p[p.length-2].y,p[p.length-1].x,p[p.length-1].y); }
+            drawCtx.stroke();
+        }
+        drawCtx.restore();
+    }
+    function createColorButtons() { const c = document.getElementById('color-options'); colors.forEach(col => { const b = document.createElement('button'); b.className='color-btn'; b.style.backgroundColor=col.code; if(col.code==='#FFFFFF') b.style.border='1px solid #ccc'; if(col.code===state.hexColor) b.classList.add('selected'); b.onclick=()=>{ state.hexColor=col.code; updateUISelection('.color-btn',b); switchToPen(); }; c.appendChild(b); }); }
+    function updateUISelection(sel, btn) { document.querySelectorAll(sel).forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); }
+    function switchToPen() { state.tool='pen'; document.getElementById('pen-tool-btn').classList.add('active-tool'); document.getElementById('eraser-btn').classList.remove('active-tool'); if(!zoomState.active) penSettingsPanel.classList.add('show'); bgSettingsPanel.classList.remove('show'); }
+    function switchToEraser() { state.tool='eraser'; document.getElementById('pen-tool-btn').classList.remove('active-tool'); document.getElementById('eraser-btn').classList.add('active-tool'); penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
+    function undo() { if(paths.length>0){ paths.pop(); redrawLines(); saveToStorage(); } }
+    function clearAll() { if(confirm('全消去しますか？')){ paths=[]; redrawLines(); saveToStorage(); } }
+    function saveToStorage() { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(paths));}catch(e){} }
+    function loadFromStorage() { const j=localStorage.getItem(STORAGE_KEY); if(j){try{paths=JSON.parse(j);redrawLines();}catch(e){}} }
+    function takeSnapshot() { drawStaticBackground(); const t=document.createElement('canvas'); t.width=drawCanvas.width; t.height=drawCanvas.height; const tx=t.getContext('2d'); tx.drawImage(bgCanvas,0,0); tx.drawImage(drawCanvas,0,0); const l=document.createElement('a'); l.download=`drawing-${Date.now()}.png`; l.href=t.toDataURL('image/png'); l.click(); }
+    function toggleRecording() { isRecording?stopRecording():startRecording(); }
+    function startRecording() { recordedChunks=[]; try{mediaRecorder=new MediaRecorder(recCanvas.captureStream(30),{mimeType:'video/webm'});}catch(e){mediaRecorder=new MediaRecorder(recCanvas.captureStream(30));} mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recordedChunks.push(e.data);}; mediaRecorder.onstop=()=>{const b=new Blob(recordedChunks,{type:'video/webm'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`video-${Date.now()}.webm`; a.click(); window.URL.revokeObjectURL(u);}; mediaRecorder.start(); isRecording=true; document.getElementById('record-btn').classList.add('recording'); startBackgroundLoop(); }
+    function stopRecording() { if(mediaRecorder)mediaRecorder.stop(); isRecording=false; document.getElementById('record-btn').classList.remove('recording'); if(state.bgMode!=='camera') isBgLoopRunning=false; }
+
+    init();
+</script>
+</body>
+</html>

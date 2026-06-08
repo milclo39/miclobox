@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Web Media Player</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* シークバー（Range input）のカスタムスタイル */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: #818cf8; /* Tailwind indigo-400 */
+            cursor: pointer;
+            margin-top: -5px; 
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #4b5563; /* Tailwind gray-600 */
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        /* スクロールバーの非表示（見た目をスッキリさせるため） */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased h-screen flex flex-col items-center justify-center selection:bg-indigo-500 selection:text-white">
+
+    <div class="w-full max-w-md bg-gray-900 h-full sm:h-[85vh] sm:rounded-2xl sm:shadow-2xl flex flex-col overflow-hidden border border-gray-800 relative">
+        
+        <!-- ヘッダー -->
+        <header class="py-4 px-6 text-center border-b border-gray-800 bg-gray-900/80 backdrop-blur z-10">
+            <h1 class="text-lg font-bold tracking-wider text-gray-200">WEB PLAYER</h1>
+        </header>
+
+        <!-- プレイヤーエリア -->
+        <div class="p-6 flex-shrink-0">
+            <!-- ビデオ/オーディオ表示枠 -->
+            <div class="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center shadow-inner border border-gray-800">
+                <!-- playsinline によりスマホでの自動フルスクリーンを防止 -->
+                <video id="media-player" class="w-full h-full object-contain" playsinline webkit-playsinline></video>
+                
+                <!-- 音声ファイル再生時に表示するポスター（♪マーク） -->
+                <div id="audio-poster" class="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex flex-col items-center justify-center transition-opacity duration-300">
+                    <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center shadow-lg border border-gray-700">
+                        <i class="fas fa-music text-4xl text-indigo-400"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 曲名・ファイル名表示 -->
+            <div class="mt-6 text-center">
+                <h2 id="current-title" class="text-xl font-bold truncate text-white">Select a track</h2>
+                <p id="current-filename" class="text-sm text-gray-400 mt-1 truncate">---</p>
+            </div>
+
+            <!-- シークバー -->
+            <div class="mt-5">
+                <input type="range" id="seek-bar" value="0" min="0" max="100" class="w-full">
+                <div class="flex justify-between mt-1 text-xs text-gray-400 font-mono">
+                    <span id="time-current">0:00</span>
+                    <span id="time-total">0:00</span>
+                </div>
+            </div>
+
+            <!-- コントロールボタン -->
+            <div class="mt-4 flex justify-between items-center px-4">
+                <!-- ループ切り替えボタン -->
+                <button id="btn-loop" class="p-2 text-gray-500 hover:text-indigo-400 transition-colors" title="Loop (1 Track)">
+                    <i class="fas fa-repeat text-lg"></i>
+                </button>
+                
+                <div class="flex items-center gap-6">
+                    <button id="btn-prev" class="text-gray-300 hover:text-white transition-transform active:scale-95 text-2xl">
+                        <i class="fas fa-backward-step"></i>
+                    </button>
+                    <!-- 再生/一時停止ボタン -->
+                    <button id="btn-play" class="text-indigo-500 hover:text-indigo-400 transition-transform active:scale-95 text-5xl">
+                        <i class="fas fa-circle-play drop-shadow-lg"></i>
+                    </button>
+                    <button id="btn-next" class="text-gray-300 hover:text-white transition-transform active:scale-95 text-2xl">
+                        <i class="fas fa-forward-step"></i>
+                    </button>
+                </div>
+
+                <!-- プレイリストループ（全体）のインジケーター等を入れるスペース -->
+                <div class="w-8"></div> 
+            </div>
+        </div>
+
+        <!-- プレイリストエリア（スクロール可能） -->
+        <div class="flex-1 overflow-y-auto no-scrollbar border-t border-gray-800 bg-gray-900/50 p-4">
+            <h3 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest px-2">Playlist</h3>
+            <ul id="playlist-container" class="space-y-2">
+                <!-- JavaScriptで動的に生成されます -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. データ定義（プレイリスト） ---
+        // 要件に従い1.mp3〜3.mp3を登録。動作確認用にmp4も一つ登録しています。
+        const playlist = [
+            { id: 1, type: 'audio', title: 'Track 1', src: 'musics/柴、ときどき爆走.mp3', thumb: '' },
+            { id: 2, type: 'audio', title: 'Track 2', src: 'musics/腐った指先を突き上げろ.mp3', thumb: '' },
+            { id: 3, type: 'audio', title: 'Track 3', src: 'musics/腐っても踊れ.mp3', thumb: '' },
+            { id: 4, type: 'audio', title: 'Track 4', src: 'musics/墓場で踊る黙示録.mp3', thumb: '' },
+            { id: 5, type: 'audio', title: 'Track 5', src: 'musics/路地裏の掟.mp3', thumb: '' },
+            { id: 6, type: 'audio', title: 'Track 6', src: 'musics/修羅の祭囃子.mp3', thumb: '' },
+
+            // テスト用動画（サムネイル画像ありの例）
+            { id: 99, type: 'video', title: 'Sample Movie', src: 'https://www.w3schools.com/html/mov_bbb.mp4', thumb: 'https://placehold.co/150x150/4f46e5/ffffff?text=MP4' }
+        ];
+
+        // --- 2. DOM要素の取得 ---
+        const player = document.getElementById('media-player');
+        const audioPoster = document.getElementById('audio-poster');
+        const titleEl = document.getElementById('current-title');
+        const filenameEl = document.getElementById('current-filename');
+        const playlistContainer = document.getElementById('playlist-container');
+        
+        const btnPlay = document.getElementById('btn-play');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const btnLoop = document.getElementById('btn-loop');
+        
+        const seekBar = document.getElementById('seek-bar');
+        const timeCurrent = document.getElementById('time-current');
+        const timeTotal = document.getElementById('time-total');
+
+        // --- 3. 状態管理変数 ---
+        let currentIndex = 0;
+        let isPlaying = false;
+        let isSingleLoop = false;
+        let isDragging = false; // シークバー操作中判定
+
+        // --- 4. プレイリストの描画処理 ---
+        function renderPlaylist() {
+            playlistContainer.innerHTML = '';
+            
+            playlist.forEach((item, index) => {
+                const li = document.createElement('li');
+                // 現在再生中のアイテムはスタイルを変える
+                const isActive = index === currentIndex;
+                const activeClasses = isActive 
+                    ? 'bg-gray-800 border-indigo-500/50 shadow-md' 
+                    : 'bg-transparent border-transparent hover:bg-gray-800/50';
+                
+                // サムネイルの生成（mp4は画像、mp3は♪アイコン）
+                let thumbHtml = '';
+                if (item.type === 'video' || item.thumb) {
+                    const imgSrc = item.thumb || 'https://placehold.co/100x100/333/fff?text=Video';
+                    thumbHtml = `<img src="${imgSrc}" alt="thumb" class="w-12 h-12 rounded-md object-cover shadow-sm border border-gray-700">`;
+                } else {
+                    thumbHtml = `
+                        <div class="w-12 h-12 rounded-md bg-gray-800 flex items-center justify-center shadow-sm border border-gray-700">
+                            <i class="fas fa-music text-gray-400 text-lg"></i>
+                        </div>`;
+                }
+
+                // 再生中アイコン
+                const playingIcon = isActive && isPlaying 
+                    ? `<div class="flex items-end gap-1 h-4">
+                           <div class="w-1 bg-indigo-400 h-full animate-[bounce_1s_infinite]"></div>
+                           <div class="w-1 bg-indigo-400 h-2/3 animate-[bounce_1s_infinite_0.2s]"></div>
+                           <div class="w-1 bg-indigo-400 h-4/5 animate-[bounce_1s_infinite_0.4s]"></div>
+                       </div>`
+                    : '';
+
+                li.className = `flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer select-none ${activeClasses}`;
+                li.innerHTML = `
+                    ${thumbHtml}
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold text-gray-200 truncate">${item.title}</p>
+                        <p class="text-xs text-gray-500 truncate mt-0.5">${item.src}</p>
+                    </div>
+                    <div class="w-6 flex justify-center">
+                        ${playingIcon}
+                    </div>
+                `;
+                
+                // タップでその曲を再生
+                li.onclick = () => {
+                    currentIndex = index;
+                    loadMedia();
+                    playMedia();
+                };
+                
+                playlistContainer.appendChild(li);
+            });
+        }
+
+        // --- 5. メディア制御ロジック ---
+        
+        // メディアを読み込む
+        function loadMedia() {
+            const item = playlist[currentIndex];
+            player.src = item.src;
+            titleEl.textContent = item.title;
+            filenameEl.textContent = item.src;
+            
+            // 音声ならポスター（♪）を表示、動画なら隠す
+            if (item.type === 'audio') {
+                audioPoster.classList.remove('hidden');
+            } else {
+                audioPoster.classList.add('hidden');
+            }
+            
+            // シークバーのリセット
+            seekBar.value = 0;
+            timeCurrent.textContent = "0:00";
+            timeTotal.textContent = "0:00";
+            
+            renderPlaylist();
+        }
+
+        // 再生する
+        function playMedia() {
+            player.play().then(() => {
+                isPlaying = true;
+                updatePlayButton();
+                renderPlaylist();
+            }).catch(e => {
+                console.error("Playback failed:", e);
+                // ファイルが無い等のエラー時
+                titleEl.textContent = "再生エラー (File Not Found)";
+                isPlaying = false;
+                updatePlayButton();
+            });
+        }
+
+        // 一時停止する
+        function pauseMedia() {
+            player.pause();
+            isPlaying = false;
+            updatePlayButton();
+            renderPlaylist();
+        }
+
+        // 再生/一時停止を切り替える
+        function togglePlay() {
+            if (isPlaying) {
+                pauseMedia();
+            } else {
+                playMedia();
+            }
+        }
+
+        // 次の曲へ（シーケンス再生）
+        function playNext() {
+            currentIndex++;
+            if (currentIndex >= playlist.length) {
+                currentIndex = 0; // リストの最後まで行ったら最初に戻る
+            }
+            loadMedia();
+            playMedia();
+        }
+
+        // 前の曲へ
+        function playPrev() {
+            // 再生時間が3秒以上経過している場合は、曲の先頭に戻す
+            if (player.currentTime > 3) {
+                player.currentTime = 0;
+                return;
+            }
+            currentIndex--;
+            if (currentIndex < 0) {
+                currentIndex = playlist.length - 1;
+            }
+            loadMedia();
+            playMedia();
+        }
+
+        // UIボタンの更新
+        function updatePlayButton() {
+            if (isPlaying) {
+                btnPlay.innerHTML = '<i class="fas fa-circle-pause drop-shadow-lg"></i>';
+            } else {
+                btnPlay.innerHTML = '<i class="fas fa-circle-play drop-shadow-lg"></i>';
+            }
+        }
+
+        // --- 6. イベントリスナー ---
+
+        // ボタン操作
+        btnPlay.addEventListener('click', togglePlay);
+        btnNext.addEventListener('click', playNext);
+        btnPrev.addEventListener('click', playPrev);
+
+        // ループ切り替えボタン（1曲ループ）
+        btnLoop.addEventListener('click', () => {
+            isSingleLoop = !isSingleLoop;
+            if (isSingleLoop) {
+                btnLoop.classList.remove('text-gray-500');
+                btnLoop.classList.add('text-indigo-400');
+            } else {
+                btnLoop.classList.add('text-gray-500');
+                btnLoop.classList.remove('text-indigo-400');
+            }
+        });
+
+        // 曲が終了した時の自動処理（シーケンス再生の肝）
+        player.addEventListener('ended', () => {
+            if (isSingleLoop) {
+                // 1曲ループONなら同じ曲を最初から再生
+                player.currentTime = 0;
+                playMedia();
+            } else {
+                // OFFなら次の曲へ
+                playNext();
+            }
+        });
+
+        // 時間表示のフォーマット（秒 -> M:SS）
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // メタデータ読み込み時（総時間の取得）
+        player.addEventListener('loadedmetadata', () => {
+            timeTotal.textContent = formatTime(player.duration);
+            seekBar.max = Math.floor(player.duration);
+        });
+
+        // 再生中の時間更新（シークバーと現在時間の表示）
+        player.addEventListener('timeupdate', () => {
+            if (!isDragging) {
+                seekBar.value = Math.floor(player.currentTime);
+                timeCurrent.textContent = formatTime(player.currentTime);
+            }
+        });
+
+        // ユーザーによるシークバー操作
+        seekBar.addEventListener('mousedown', () => isDragging = true);
+        seekBar.addEventListener('touchstart', () => isDragging = true, {passive: true});
+        
+        seekBar.addEventListener('input', () => {
+            timeCurrent.textContent = formatTime(seekBar.value);
+        });
+
+        seekBar.addEventListener('mouseup', () => {
+            isDragging = false;
+            player.currentTime = seekBar.value;
+        });
+        seekBar.addEventListener('touchend', () => {
+            isDragging = false;
+            player.currentTime = seekBar.value;
+        });
+
+        // --- 7. 初期化処理 ---
+        loadMedia();
+
+    </script>
+</body>
+</html>
