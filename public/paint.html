@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>miclobox</title>
-    <link rel="icon" href="icon.png">
-    <link rel="manifest" href="manifest.json">
+    <title>AR Drawing - With Timer Widget</title>
     <!-- Tone.js (タイマー音声用) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
@@ -55,6 +53,17 @@
         button.bg-active { background: #10b981; color: white; }
         button.zoom-active { background: #f59e0b; color: white; box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px rgba(245, 158, 11, 0.5); }
         button.timer-active { background: #8b5cf6; color: white; }
+        #viewport.text-mode { cursor: text; }
+        #viewport.stamp-mode { cursor: copy; }
+        #viewport.drop-ready::after {
+            content: "";
+            position: fixed;
+            inset: 10px;
+            border: 3px dashed rgba(59, 130, 246, 0.7);
+            border-radius: 16px;
+            pointer-events: none;
+            z-index: 90;
+        }
 
         .controls { position: fixed; top: 15px; left: 15px; z-index: 100; display: flex; gap: 10px; flex-wrap: wrap; }
         
@@ -86,9 +95,25 @@
         .dot { background: #333; border-radius: 50%; display: block; }
         .opacity-btn { width: auto; padding: 0 8px; font-size: 12px; font-weight: bold; height: 32px; background: white; border: 1px solid #ddd; color: #666; }
         .opacity-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .text-panel { min-width: 280px; }
+        .text-panel textarea {
+            width: 100%; min-height: 70px; box-sizing: border-box; resize: vertical;
+            border: 1px solid #d1d5db; border-radius: 8px; padding: 8px;
+            font-size: 16px; outline: none;
+        }
+        .text-panel select, .text-panel input[type=number] {
+            height: 34px; border: 1px solid #d1d5db; border-radius: 6px;
+            padding: 0 8px; background: white; font-size: 14px;
+        }
+        .text-panel label { font-size: 12px; color: #555; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+        .text-style-btn { width: 34px; height: 34px; font-size: 16px; font-weight: bold; background: white; border: 1px solid #ddd; color: #333; }
+        .text-style-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .text-action-btn { width: auto; height: 36px; padding: 0 14px; font-size: 14px; font-weight: bold; }
+        .text-action-btn.primary { background: #3b82f6; color: white; }
+        .text-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
         .media-controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 25px; }
-        #snap-btn, #record-btn { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #snap-btn, #record-btn, #undo-btn, #timer-toggle-btn { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
         #record-btn .icon { width: 26px; height: 26px; background: #ef4444; border-radius: 50%; transition: all 0.3s; }
         #record-btn.recording { border: 4px solid rgba(239,68,68,0.3); background: white; }
         #record-btn.recording .icon { border-radius: 4px; transform: scale(0.6); }
@@ -216,10 +241,11 @@
     <button id="zoom-mode-btn" title="ズームモード切替">🔍</button>
     <button id="bg-menu-btn" title="背景設定">🖼️</button>
     <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
+    <button id="text-tool-btn" title="テキスト">T</button>
+    <button id="stamp-tool-btn" title="画像スタンプ">🧩</button>
+    <!--button id="settings-toggle-btn" title="ペン設定">🎨</button-->
     <button id="eraser-btn" title="消しゴム">🧼</button>
-    <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="clear-btn" title="全消去">🗑️</button>
-    <button id="timer-toggle-btn" title="タイマー">⏱️</button>
 </div>
 
 <div id="timer-widget">
@@ -289,6 +315,40 @@
     </div>
 </div>
 
+<div id="text-settings" class="popup-panel text-panel">
+    <textarea id="text-input" placeholder="テキスト"></textarea>
+    <div class="setting-group">
+        <label>フォント
+            <select id="text-font">
+                <option value="sans-serif">Sans</option>
+                <option value="serif">Serif</option>
+                <option value="monospace">Mono</option>
+                <option value="'Yu Gothic', 'Meiryo', sans-serif">ゴシック</option>
+                <option value="'Yu Mincho', 'MS Mincho', serif">明朝</option>
+            </select>
+        </label>
+        <label>サイズ
+            <input id="text-size" type="number" min="8" max="240" value="48" step="1">
+        </label>
+    </div>
+    <div class="setting-group">
+        <button id="text-bold-btn" class="text-style-btn" title="太字">B</button>
+        <button id="text-italic-btn" class="text-style-btn" title="斜体"><i>I</i></button>
+        <button id="text-underline-btn" class="text-style-btn" title="下線"><u>U</u></button>
+        <button id="text-strike-btn" class="text-style-btn" title="取消"><s>S</s></button>
+        <label>回転
+            <input id="text-rotation" type="number" min="-360" max="360" value="0" step="1">
+        </label>
+    </div>
+    <div class="setting-group" style="justify-content:flex-end;">
+        <button id="text-copy-btn" class="text-action-btn">コピー</button>
+        <button id="text-cut-btn" class="text-action-btn">カット</button>
+        <button id="text-paste-btn" class="text-action-btn">ペースト</button>
+        <button id="text-cancel-btn" class="text-action-btn">キャンセル</button>
+        <button id="text-ok-btn" class="text-action-btn primary">OK</button>
+    </div>
+</div>
+
 <div id="pen-settings" class="popup-panel">
     <div class="setting-group" id="color-options"></div>
     <div class="setting-group">
@@ -306,10 +366,13 @@
 </div>
 
 <input type="file" id="image-uploader" accept="image/*" style="display: none;">
+<input type="file" id="stamp-uploader" accept="image/png,image/*" style="display: none;">
 
 <div class="media-controls">
+    <button id="undo-btn" title="元に戻す">↩️</button>
     <button id="snap-btn" title="画像を保存">📸</button>
     <button id="record-btn" title="録画開始/停止"><div class="icon"></div></button>
+    <button id="timer-toggle-btn" title="タイマー">⏱️</button>
 </div>
 
 <div id="viewport">
@@ -322,12 +385,6 @@
 <video id="video-feed" playsinline autoplay muted style="display:none;"></video>
 
 <script>
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-            .then(() => console.log("sw_ok"))
-            .catch(err => console.error("sw_err:", err));
-    }
-
     const STORAGE_KEY = 'ar_drawing_data_v8'; 
     const colors = [
         { code: '#000000' }, { code: '#FFFFFF' }, { code: '#EF4444' }, { code: '#F97316' },
@@ -339,7 +396,16 @@
         bgMode: 'white',
         cameraResolution: null, // { width, height } or null
         currentDeviceId: null,
-        isTimerVisible: false
+        isTimerVisible: false,
+        textStyle: {
+            font: 'sans-serif',
+            size: 48,
+            bold: false,
+            italic: false,
+            underline: false,
+            strike: false,
+            rotation: 0
+        }
     };
     
     let zoomState = {
@@ -349,6 +415,14 @@
 
     let activePointers = new Map();
     let paths = [];
+    let pendingTextPosition = null;
+    let selectedItemIndex = -1;
+    let selectedTextIndex = -1;
+    let textClipboardItem = null;
+    let pendingStampData = null;
+    let stampImageCache = new Map();
+    let dragMoveState = { active: false, index: -1, startX: 0, startY: 0, originalX: 0, originalY: 0 };
+    let undoHistory = [];
     
     let videoStream = null;
     let backgroundImage = null;
@@ -370,7 +444,20 @@
     
     const penSettingsPanel = document.getElementById('pen-settings');
     const bgSettingsPanel = document.getElementById('bg-settings');
+    const textSettingsPanel = document.getElementById('text-settings');
+    const textInput = document.getElementById('text-input');
+    const textFontInput = document.getElementById('text-font');
+    const textSizeInput = document.getElementById('text-size');
+    const textRotationInput = document.getElementById('text-rotation');
+    const textBoldBtn = document.getElementById('text-bold-btn');
+    const textItalicBtn = document.getElementById('text-italic-btn');
+    const textUnderlineBtn = document.getElementById('text-underline-btn');
+    const textStrikeBtn = document.getElementById('text-strike-btn');
+    const textCopyBtn = document.getElementById('text-copy-btn');
+    const textCutBtn = document.getElementById('text-cut-btn');
+    const textPasteBtn = document.getElementById('text-paste-btn');
     const imageUploader = document.getElementById('image-uploader');
+    const stampUploader = document.getElementById('stamp-uploader');
     const cameraListContainer = document.getElementById('camera-list-container');
     const currentResInfo = document.getElementById('current-res-info');
     
@@ -424,25 +511,19 @@
     }
 
     function setupEventListeners() {
-		document.getElementById('pen-tool-btn').onclick = () => {
-	        if (state.tool === 'pen') {
-	            // 既にペンの場合：設定パネルを開閉
-	            if(zoomState.active) return;
-	            bgSettingsPanel.classList.remove('show');
-	            penSettingsPanel.classList.toggle('show');
-	        } else {
-	            // 他のツールの場合：ペンに切り替え（switchToPen内でパネルも開く）
-	            switchToPen();
-	        }
-	    };
+        document.getElementById('pen-tool-btn').onclick = switchToPen;
+        document.getElementById('text-tool-btn').onclick = switchToText;
+        document.getElementById('stamp-tool-btn').onclick = switchToStamp;
         document.getElementById('eraser-btn').onclick = switchToEraser;
-		document.getElementById('bg-menu-btn').onclick = async (e) => {
-	        e.stopPropagation();
-	        if(zoomState.active) return;
-	        penSettingsPanel.classList.remove('show');
-	        bgSettingsPanel.classList.toggle('show');
-	        if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
-	    };
+//        document.getElementById('settings-toggle-btn').onclick = (e) => {
+//            e.stopPropagation(); if(zoomState.active) return;
+//            bgSettingsPanel.classList.remove('show'); penSettingsPanel.classList.toggle('show');
+//        };
+        document.getElementById('bg-menu-btn').onclick = async (e) => {
+            e.stopPropagation(); if(zoomState.active) return;
+            penSettingsPanel.classList.remove('show'); textSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.toggle('show');
+            if (bgSettingsPanel.classList.contains('show')) await refreshCameraList();
+        };
 
         // Timer Toggle
         timerToggleBtn.onclick = (e) => {
@@ -500,6 +581,15 @@
             };
             reader.readAsDataURL(file);
         };
+        stampUploader.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            loadStampFile(file, (stamp) => {
+                pendingStampData = stamp;
+                activateStampMode();
+            });
+            stampUploader.value = '';
+        };
 
         document.getElementById('undo-btn').onclick = undo;
         document.getElementById('clear-btn').onclick = clearAll;
@@ -512,11 +602,22 @@
         document.querySelectorAll('.opacity-btn').forEach(btn => {
             btn.onclick = () => { state.alpha = parseFloat(btn.dataset.alpha); updateUISelection('.opacity-btn', btn); };
         });
+        [textBoldBtn, textItalicBtn, textUnderlineBtn, textStrikeBtn].forEach(btn => {
+            btn.onclick = () => btn.classList.toggle('selected');
+        });
+        document.getElementById('text-ok-btn').onclick = confirmText;
+        document.getElementById('text-cancel-btn').onclick = cancelText;
+        textCopyBtn.onclick = copySelectedText;
+        textCutBtn.onclick = cutSelectedText;
+        textPasteBtn.onclick = pasteText;
 
         viewport.addEventListener('pointerdown', handlePointerDown);
         viewport.addEventListener('pointermove', handlePointerMove);
         viewport.addEventListener('pointerup', handlePointerUp);
         viewport.addEventListener('pointercancel', handlePointerUp);
+        viewport.addEventListener('dragover', handleStampDragOver);
+        viewport.addEventListener('dragleave', handleStampDragLeave);
+        viewport.addEventListener('drop', handleStampDrop);
         
         viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
         viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -725,22 +826,51 @@
         if (!zoomState.active) { penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
         if (zoomState.active) {
             if (zoomState.scale > 1.0) { zoomState.isDragging = true; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; viewport.setPointerCapture(e.pointerId); }
+        } else if (state.tool === 'text') {
+            e.preventDefault();
+            const hitIndex = hitTestSelectable(e.clientX, e.clientY);
+            if (hitIndex >= 0) {
+                selectItem(hitIndex, e.clientX, e.clientY);
+                startMoveDrag(e, hitIndex);
+            } else {
+                clearSelection();
+                openTextMenu(e.clientX, e.clientY);
+            }
+        } else if (state.tool === 'stamp') {
+            e.preventDefault();
+            const hitIndex = hitTestSelectable(e.clientX, e.clientY);
+            if (hitIndex >= 0) {
+                selectItem(hitIndex, e.clientX, e.clientY);
+                startMoveDrag(e, hitIndex);
+            } else if (pendingStampData) {
+                addStampAt(e.clientX, e.clientY, pendingStampData);
+            } else {
+                clearSelection();
+                stampUploader.click();
+            }
         } else {
             e.preventDefault(); const drawColor = getRgbaColor(state.hexColor, state.alpha);
             const newPath = { id: e.pointerId, points: [{x: e.clientX, y: e.clientY}], tool: state.tool, color: drawColor, width: state.tool === 'eraser' ? 25 : state.size };
-            activePointers.set(e.pointerId, newPath); viewport.setPointerCapture(e.pointerId); redrawLines();
+            activePointers.set(e.pointerId, newPath); viewport.setPointerCapture(e.pointerId); clearSelection(); redrawLines();
         }
     }
     function handlePointerMove(e) {
         if (zoomState.active) {
             if (zoomState.isDragging) { const dx = e.clientX - zoomState.lastX; const dy = e.clientY - zoomState.lastY; zoomState.translateX += dx; zoomState.translateY += dy; zoomState.lastX = e.clientX; zoomState.lastY = e.clientY; clampTranslation(); updateTransform(); }
+        } else if (dragMoveState.active) {
+            const item = paths[dragMoveState.index];
+            if (!item) return;
+            item.x = dragMoveState.originalX + (e.clientX - dragMoveState.startX);
+            item.y = dragMoveState.originalY + (e.clientY - dragMoveState.startY);
+            redrawLines();
         } else {
             if (!activePointers.has(e.pointerId)) return; const path = activePointers.get(e.pointerId); path.points.push({x: e.clientX, y: e.clientY}); redrawLines();
         }
     }
     function handlePointerUp(e) {
         if (zoomState.active) { zoomState.isDragging = false; }
-        else { if (activePointers.has(e.pointerId)) { const path = activePointers.get(e.pointerId); paths.push(path); activePointers.delete(e.pointerId); viewport.releasePointerCapture(e.pointerId); redrawLines(); saveToStorage(); } }
+        else if (dragMoveState.active) { finishMoveDrag(e); }
+        else { if (activePointers.has(e.pointerId)) { const path = activePointers.get(e.pointerId); paths.push(path); undoHistory.push({ type: 'add', index: paths.length - 1 }); activePointers.delete(e.pointerId); viewport.releasePointerCapture(e.pointerId); redrawLines(); saveToStorage(); } }
     }
 
     // --- 背景・カメラ制御 ---
@@ -847,8 +977,10 @@
 
     // --- その他ヘルパー ---
     function getRgbaColor(hex, alpha) { const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${alpha})`; }
-    function redrawLines() { drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); drawCtx.lineCap='round'; drawCtx.lineJoin='round'; paths.forEach(p=>drawPath(p)); activePointers.forEach(p=>drawPath(p)); }
+    function redrawLines() { drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); drawCtx.lineCap='round'; drawCtx.lineJoin='round'; paths.forEach(p=>drawPath(p)); activePointers.forEach(p=>drawPath(p)); drawSelection(); }
     function drawPath(path) {
+        if(path.type === 'stamp') { drawStampItem(path); return; }
+        if(path.type === 'text') { drawTextItem(path); return; }
         const p = path.points; if(p.length<1) return;
         drawCtx.save(); drawCtx.lineWidth=path.width;
         if(path.tool==='eraser') drawCtx.globalCompositeOperation='destination-out';
@@ -863,12 +995,384 @@
         }
         drawCtx.restore();
     }
+    function drawStampItem(item) {
+        const cached = stampImageCache.get(item.src);
+        if (cached && cached.complete) {
+            drawCtx.drawImage(cached, item.x, item.y, item.width, item.height);
+            return;
+        }
+        const img = new Image();
+        img.onload = () => redrawLines();
+        img.src = item.src;
+        stampImageCache.set(item.src, img);
+    }
+    function loadStampFile(file, callback) {
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const src = evt.target.result;
+            const img = new Image();
+            img.onload = () => {
+                stampImageCache.set(src, img);
+                callback({
+                    src,
+                    naturalWidth: img.naturalWidth || img.width,
+                    naturalHeight: img.naturalHeight || img.height
+                });
+            };
+            img.src = src;
+        };
+        reader.readAsDataURL(file);
+    }
+    function addStampAt(centerX, centerY, stamp) {
+        const maxSize = 240;
+        const naturalWidth = stamp.naturalWidth || maxSize;
+        const naturalHeight = stamp.naturalHeight || maxSize;
+        const scale = Math.min(1, maxSize / Math.max(naturalWidth, naturalHeight));
+        const width = Math.max(1, Math.round(naturalWidth * scale));
+        const height = Math.max(1, Math.round(naturalHeight * scale));
+        const item = {
+            type: 'stamp',
+            src: stamp.src,
+            x: centerX - width / 2,
+            y: centerY - height / 2,
+            width,
+            height
+        };
+        paths.push(item);
+        undoHistory.push({ type: 'add', index: paths.length - 1 });
+        clearTextSelection();
+        cancelText();
+        redrawLines();
+        saveToStorage();
+    }
+    function handleStampDragOver(e) {
+        const hasImage = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file' && item.type.startsWith('image/'));
+        if (!hasImage || zoomState.active) return;
+        e.preventDefault();
+        viewport.classList.add('drop-ready');
+    }
+    function handleStampDragLeave(e) {
+        if (e.relatedTarget && viewport.contains(e.relatedTarget)) return;
+        viewport.classList.remove('drop-ready');
+    }
+    function handleStampDrop(e) {
+        viewport.classList.remove('drop-ready');
+        if (zoomState.active) return;
+        const file = Array.from(e.dataTransfer?.files || []).find(f => f.type.startsWith('image/'));
+        if (!file) return;
+        e.preventDefault();
+        loadStampFile(file, (stamp) => addStampAt(e.clientX, e.clientY, stamp));
+    }
+    function drawTextItem(item) {
+        const lines = String(item.text || '').split('\n');
+        const size = item.size || 48;
+        const lineHeight = size * 1.2;
+        const fontStyle = `${item.italic ? 'italic ' : ''}${item.bold ? '700 ' : ''}${size}px ${item.font || 'sans-serif'}`;
+        drawCtx.save();
+        drawCtx.translate(item.x, item.y);
+        drawCtx.rotate((item.rotation || 0) * Math.PI / 180);
+        drawCtx.font = fontStyle;
+        drawCtx.fillStyle = item.color || '#000';
+        drawCtx.textBaseline = 'top';
+        drawCtx.textAlign = 'left';
+        lines.forEach((line, index) => {
+            const y = index * lineHeight;
+            drawCtx.fillText(line, 0, y);
+            const metrics = drawCtx.measureText(line);
+            if (item.underline) {
+                drawCtx.fillRect(0, y + size + 2, metrics.width, Math.max(1, size / 18));
+            }
+            if (item.strike) {
+                drawCtx.fillRect(0, y + size * 0.55, metrics.width, Math.max(1, size / 18));
+            }
+        });
+        drawCtx.restore();
+    }
+    function getTextFont(item) {
+        const size = item.size || 48;
+        return `${item.italic ? 'italic ' : ''}${item.bold ? '700 ' : ''}${size}px ${item.font || 'sans-serif'}`;
+    }
+    function getTextBounds(item) {
+        const lines = String(item.text || '').split('\n');
+        const size = item.size || 48;
+        const lineHeight = size * 1.2;
+        drawCtx.save();
+        drawCtx.font = getTextFont(item);
+        const width = Math.max(1, ...lines.map(line => drawCtx.measureText(line).width));
+        drawCtx.restore();
+        return { x: 0, y: 0, width, height: Math.max(lineHeight, lines.length * lineHeight) };
+    }
+    function hitTestText(x, y) {
+        for (let i = paths.length - 1; i >= 0; i--) {
+            const item = paths[i];
+            if (item.type !== 'text') continue;
+            if (isPointInItem(item, x, y)) return i;
+        }
+        return -1;
+    }
+    function getItemBounds(item) {
+        if (item.type === 'text') return getTextBounds(item);
+        if (item.type === 'stamp') return { x: 0, y: 0, width: item.width || 1, height: item.height || 1 };
+        return null;
+    }
+    function isPointInItem(item, x, y) {
+        const bounds = getItemBounds(item);
+        if (!bounds) return false;
+        const angle = -((item.rotation || 0) * Math.PI / 180);
+        const dx = x - item.x;
+        const dy = y - item.y;
+        const localX = dx * Math.cos(angle) - dy * Math.sin(angle);
+        const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
+        const pad = 8;
+        return localX >= bounds.x - pad && localX <= bounds.width + pad && localY >= bounds.y - pad && localY <= bounds.height + pad;
+    }
+    function hitTestSelectable(x, y) {
+        for (let i = paths.length - 1; i >= 0; i--) {
+            const item = paths[i];
+            if ((item.type === 'text' || item.type === 'stamp') && isPointInItem(item, x, y)) return i;
+        }
+        return -1;
+    }
+    function drawSelection() {
+        if (selectedItemIndex < 0 || !paths[selectedItemIndex]) return;
+        const item = paths[selectedItemIndex];
+        const bounds = getItemBounds(item);
+        if (!bounds) return;
+        const pad = 6;
+        drawCtx.save();
+        drawCtx.translate(item.x, item.y);
+        drawCtx.rotate((item.rotation || 0) * Math.PI / 180);
+        drawCtx.setLineDash([6, 4]);
+        drawCtx.lineWidth = 2;
+        drawCtx.strokeStyle = '#2563eb';
+        drawCtx.strokeRect(-pad, -pad, bounds.width + pad * 2, bounds.height + pad * 2);
+        drawCtx.restore();
+    }
+    function startMoveDrag(e, index) {
+        const item = paths[index];
+        if (!item) return;
+        dragMoveState = {
+            active: true,
+            index,
+            startX: e.clientX,
+            startY: e.clientY,
+            originalX: item.x,
+            originalY: item.y
+        };
+        viewport.setPointerCapture(e.pointerId);
+    }
+    function finishMoveDrag(e) {
+        const item = paths[dragMoveState.index];
+        if (item) {
+            const moved = Math.abs(item.x - dragMoveState.originalX) > 0.5 || Math.abs(item.y - dragMoveState.originalY) > 0.5;
+            if (moved) {
+                undoHistory.push({
+                    type: 'move',
+                    index: dragMoveState.index,
+                    previous: { x: dragMoveState.originalX, y: dragMoveState.originalY },
+                    next: { x: item.x, y: item.y }
+                });
+                saveToStorage();
+            }
+        }
+        if (e && typeof e.pointerId !== 'undefined') {
+            try { viewport.releasePointerCapture(e.pointerId); } catch(err) {}
+        }
+        dragMoveState = { active: false, index: -1, startX: 0, startY: 0, originalX: 0, originalY: 0 };
+        redrawLines();
+    }
+    function cloneTextItem(item, x = item.x, y = item.y) {
+        return { ...item, x, y };
+    }
+    function updateTextActionButtons() {
+        const hasSelection = selectedItemIndex >= 0 && paths[selectedItemIndex] && paths[selectedItemIndex].type === 'text';
+        textCopyBtn.disabled = !hasSelection;
+        textCutBtn.disabled = !hasSelection;
+        textPasteBtn.disabled = !textClipboardItem;
+    }
+    function fillTextInputsFromItem(item) {
+        textInput.value = item.text || '';
+        textFontInput.value = item.font || state.textStyle.font;
+        textSizeInput.value = item.size || state.textStyle.size;
+        textRotationInput.value = item.rotation || 0;
+        textBoldBtn.classList.toggle('selected', !!item.bold);
+        textItalicBtn.classList.toggle('selected', !!item.italic);
+        textUnderlineBtn.classList.toggle('selected', !!item.underline);
+        textStrikeBtn.classList.toggle('selected', !!item.strike);
+    }
+    function selectText(index, x, y) {
+        selectItem(index, x, y);
+    }
+    function selectItem(index, x, y) {
+        const item = paths[index];
+        if (!item || (item.type !== 'text' && item.type !== 'stamp')) return;
+        selectedItemIndex = index;
+        selectedTextIndex = item.type === 'text' ? index : -1;
+        pendingTextPosition = null;
+        if (item.type === 'text') {
+            fillTextInputsFromItem(item);
+            textSettingsPanel.classList.add('show');
+            positionPopup(textSettingsPanel, x, y);
+        } else {
+            textSettingsPanel.classList.remove('show');
+        }
+        updateTextActionButtons();
+        redrawLines();
+    }
+    function clearTextSelection() {
+        clearSelection();
+    }
+    function clearSelection() {
+        selectedItemIndex = -1;
+        selectedTextIndex = -1;
+        updateTextActionButtons();
+    }
+    function openTextMenu(x, y) {
+        pendingTextPosition = { x, y };
+        selectedItemIndex = -1;
+        selectedTextIndex = -1;
+        textInput.value = '';
+        textFontInput.value = state.textStyle.font;
+        textSizeInput.value = state.textStyle.size;
+        textRotationInput.value = state.textStyle.rotation;
+        textBoldBtn.classList.toggle('selected', state.textStyle.bold);
+        textItalicBtn.classList.toggle('selected', state.textStyle.italic);
+        textUnderlineBtn.classList.toggle('selected', state.textStyle.underline);
+        textStrikeBtn.classList.toggle('selected', state.textStyle.strike);
+        textSettingsPanel.classList.add('show');
+        updateTextActionButtons();
+        positionPopup(textSettingsPanel, x, y);
+        textInput.focus();
+        redrawLines();
+    }
+    function positionPopup(panel, x, y) {
+        const margin = 12;
+        panel.style.left = `${Math.min(x + margin, window.innerWidth - panel.offsetWidth - margin)}px`;
+        panel.style.top = `${Math.min(y + margin, window.innerHeight - panel.offsetHeight - margin)}px`;
+    }
+    function confirmText() {
+        const text = textInput.value;
+        const selectedItem = paths[selectedTextIndex];
+        const hasSelectedText = selectedTextIndex >= 0 && selectedItem && selectedItem.type === 'text';
+        if ((!pendingTextPosition && !hasSelectedText) || !text.trim()) { cancelText(); return; }
+        state.textStyle = {
+            font: textFontInput.value,
+            size: Math.max(8, parseInt(textSizeInput.value) || 48),
+            bold: textBoldBtn.classList.contains('selected'),
+            italic: textItalicBtn.classList.contains('selected'),
+            underline: textUnderlineBtn.classList.contains('selected'),
+            strike: textStrikeBtn.classList.contains('selected'),
+            rotation: parseFloat(textRotationInput.value) || 0
+        };
+        const newItem = {
+            type: 'text',
+            text,
+            x: pendingTextPosition ? pendingTextPosition.x : selectedItem.x,
+            y: pendingTextPosition ? pendingTextPosition.y : selectedItem.y,
+            color: pendingTextPosition ? getRgbaColor(state.hexColor, state.alpha) : selectedItem.color,
+            ...state.textStyle
+        };
+        if (hasSelectedText) {
+            const previous = cloneTextItem(selectedItem);
+            paths[selectedTextIndex] = newItem;
+            undoHistory.push({ type: 'update', index: selectedTextIndex, previous, next: cloneTextItem(newItem) });
+        } else {
+            paths.push(newItem);
+            selectedItemIndex = paths.length - 1;
+            selectedTextIndex = selectedItemIndex;
+            undoHistory.push({ type: 'add', index: selectedItemIndex });
+        }
+        textSettingsPanel.classList.remove('show');
+        pendingTextPosition = null;
+        redrawLines();
+        saveToStorage();
+    }
+    function cancelText() {
+        textSettingsPanel.classList.remove('show');
+        pendingTextPosition = null;
+        updateTextActionButtons();
+    }
+    function copySelectedText() {
+        if (selectedItemIndex < 0 || !paths[selectedItemIndex] || paths[selectedItemIndex].type !== 'text') return;
+        textClipboardItem = cloneTextItem(paths[selectedItemIndex]);
+        updateTextActionButtons();
+    }
+    function cutSelectedText() {
+        if (selectedItemIndex < 0 || !paths[selectedItemIndex] || paths[selectedItemIndex].type !== 'text') return;
+        textClipboardItem = cloneTextItem(paths[selectedItemIndex]);
+        const removed = paths.splice(selectedItemIndex, 1)[0];
+        undoHistory.push({ type: 'remove', index: selectedItemIndex, item: removed });
+        selectedItemIndex = -1;
+        selectedTextIndex = -1;
+        pendingTextPosition = null;
+        textSettingsPanel.classList.remove('show');
+        redrawLines();
+        saveToStorage();
+        updateTextActionButtons();
+    }
+    function pasteText() {
+        if (!textClipboardItem) return;
+        const base = selectedItemIndex >= 0 && paths[selectedItemIndex] && paths[selectedItemIndex].type === 'text'
+            ? { x: paths[selectedItemIndex].x + 24, y: paths[selectedItemIndex].y + 24 }
+            : pendingTextPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        const pasted = cloneTextItem(textClipboardItem, base.x, base.y);
+        paths.push(pasted);
+        selectedItemIndex = paths.length - 1;
+        selectedTextIndex = selectedItemIndex;
+        pendingTextPosition = null;
+        undoHistory.push({ type: 'add', index: selectedItemIndex });
+        textSettingsPanel.classList.remove('show');
+        redrawLines();
+        saveToStorage();
+        updateTextActionButtons();
+    }
     function createColorButtons() { const c = document.getElementById('color-options'); colors.forEach(col => { const b = document.createElement('button'); b.className='color-btn'; b.style.backgroundColor=col.code; if(col.code==='#FFFFFF') b.style.border='1px solid #ccc'; if(col.code===state.hexColor) b.classList.add('selected'); b.onclick=()=>{ state.hexColor=col.code; updateUISelection('.color-btn',b); switchToPen(); }; c.appendChild(b); }); }
     function updateUISelection(sel, btn) { document.querySelectorAll(sel).forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); }
-    function switchToPen() { state.tool='pen'; document.getElementById('pen-tool-btn').classList.add('active-tool'); document.getElementById('eraser-btn').classList.remove('active-tool'); if(!zoomState.active) penSettingsPanel.classList.add('show'); bgSettingsPanel.classList.remove('show'); }
-    function switchToEraser() { state.tool='eraser'; document.getElementById('pen-tool-btn').classList.remove('active-tool'); document.getElementById('eraser-btn').classList.add('active-tool'); penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
-    function undo() { if(paths.length>0){ paths.pop(); redrawLines(); saveToStorage(); } }
-    function clearAll() { if(confirm('全消去しますか？')){ paths=[]; redrawLines(); saveToStorage(); } }
+    function setActiveToolButton(id) {
+        ['pen-tool-btn', 'text-tool-btn', 'stamp-tool-btn', 'eraser-btn'].forEach(btnId => {
+            document.getElementById(btnId).classList.toggle('active-tool', btnId === id);
+        });
+    }
+    function clearStampMode() {
+        pendingStampData = null;
+        viewport.classList.remove('stamp-mode', 'drop-ready');
+    }
+    function activateStampMode() {
+        state.tool = 'stamp';
+        viewport.classList.remove('text-mode');
+        viewport.classList.add('stamp-mode');
+        cancelText();
+        clearTextSelection();
+        penSettingsPanel.classList.remove('show');
+        bgSettingsPanel.classList.remove('show');
+        setActiveToolButton('stamp-tool-btn');
+        redrawLines();
+    }
+    function switchToPen() { state.tool='pen'; viewport.classList.remove('text-mode'); clearStampMode(); cancelText(); clearTextSelection(); redrawLines(); setActiveToolButton('pen-tool-btn'); if(!zoomState.active) penSettingsPanel.classList.add('show'); bgSettingsPanel.classList.remove('show'); }
+    function switchToText() { state.tool='text'; clearStampMode(); viewport.classList.add('text-mode'); penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); setActiveToolButton('text-tool-btn'); }
+    function switchToStamp() { activateStampMode(); stampUploader.click(); }
+    function switchToEraser() { state.tool='eraser'; viewport.classList.remove('text-mode'); clearStampMode(); cancelText(); clearTextSelection(); redrawLines(); setActiveToolButton('eraser-btn'); penSettingsPanel.classList.remove('show'); bgSettingsPanel.classList.remove('show'); }
+    function undo() {
+        const action = undoHistory.pop();
+        if (action) {
+            if (action.type === 'add') paths.splice(action.index, 1);
+            else if (action.type === 'remove') paths.splice(action.index, 0, action.item);
+            else if (action.type === 'update') paths[action.index] = action.previous;
+            else if (action.type === 'move' && paths[action.index]) {
+                paths[action.index].x = action.previous.x;
+                paths[action.index].y = action.previous.y;
+            }
+        } else if(paths.length>0) {
+            paths.pop();
+        }
+        selectedItemIndex = -1;
+        selectedTextIndex = -1;
+        cancelText();
+        redrawLines();
+        saveToStorage();
+    }
+    function clearAll() { if(confirm('全消去しますか？')){ paths=[]; undoHistory=[]; selectedItemIndex=-1; selectedTextIndex=-1; cancelText(); redrawLines(); saveToStorage(); } }
     function saveToStorage() { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(paths));}catch(e){} }
     function loadFromStorage() { const j=localStorage.getItem(STORAGE_KEY); if(j){try{paths=JSON.parse(j);redrawLines();}catch(e){}} }
     function takeSnapshot() { drawStaticBackground(); const t=document.createElement('canvas'); t.width=drawCanvas.width; t.height=drawCanvas.height; const tx=t.getContext('2d'); tx.drawImage(bgCanvas,0,0); tx.drawImage(drawCanvas,0,0); const l=document.createElement('a'); l.download=`drawing-${Date.now()}.png`; l.href=t.toDataURL('image/png'); l.click(); }
