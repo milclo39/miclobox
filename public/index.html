@@ -3,10 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>TAKO PLAY PORTAL</title>
+    <title>miclobox</title>
+    <link rel="icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="portal.css">
   </head>
   <body>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("sw_ok"))
+            .catch(err => console.error("sw_err:", err));
+    }
+    </script>
     <header class="site-header">
       <div class="site-shell site-nav">
         <a class="brand" href="index.html" aria-label="TAKO PLAY PORTAL ホーム">
@@ -14,10 +23,10 @@
           <span>TAKO PLAY PORTAL</span>
         </a>
         <nav class="nav-links" aria-label="ゲーム一覧">
-          <a href="suikagame.html">スイカゲーム</a>
-          <a href="takomars.html">タコマーズ</a>
+          <a href="suikagame.html">スイカ</a>
+          <a href="takomars.html">タコマ</a>
           <a href="paint.html">お絵描き</a>
-          <a href="mplayer.html">音楽プレイヤー</a>
+          <a href="mplayer.html">音楽</a>
         </nav>
       </div>
     </header>
@@ -28,13 +37,12 @@
           <p class="eyebrow">BROWSER GAME COLLECTION</p>
           <h1>遊びたい気分で選べる、タコ印のゲームポータル。</h1>
           <p>
-            合体パズル、火星アクション、海洋シミュレーション、サバイバルRPG。
-            4つの架空Webゲームを並べたポータルサイトのサンプルです。
+            合体パズル、火星アクション、お絵描き、音楽などのソフト詰め合せ
           </p>
-          <div class="hero-actions">
+          <!--div class="hero-actions">
             <a class="play-button" href="#games">ゲームを見る</a>
             <a class="ghost-button" href="takomars.html">注目タイトル</a>
-          </div>
+          </div-->
         </div>
         <div class="hero-stage" aria-label="ゲームサムネイル">
           <div class="hero-tile"><img src="images/suikagame.png" alt="スイカゲームのサムネイル"></div>
@@ -91,9 +99,9 @@
               <h3>お絵描きソフト</h3>
               <p>自由なお絵かきソフト。描いた分が保存されます。</p>
               <div class="tag-row">
-                <span class="tag">航海</span>
-                <span class="tag">交易</span>
-                <span class="tag">戦略</span>
+                <span class="tag">カメラ</span>
+                <span class="tag">お絵描き</span>
+                <span class="tag">メモ帳</span>
               </div>
               <a class="card-link" href="paint.html">開く</a>
             </div>
@@ -105,11 +113,11 @@
             </div>
             <div class="game-body">
               <h3>音楽プレイヤー</h3>
-              <p>音楽が聴けるソフト</p>
+              <p>音楽が聴けるソフト。作業用ＢＧＭ</p>
               <div class="tag-row">
-                <span class="tag">生存</span>
-                <span class="tag">探索</span>
-                <span class="tag">RPG</span>
+                <span class="tag">音源</span>
+                <span class="tag">音楽</span>
+                <span class="tag">BGM</span>
               </div>
               <a class="card-link" href="mplayer.html">開く</a>
             </div>
@@ -119,7 +127,7 @@
     </main>
 
     <footer class="site-footer">
-      <div class="site-shell">Sample portal for web games. Assets: images/tako1.png - tako4.png</div>
+      <div class="site-shell">Miclo portal for web games.</div>
     </footer>
   </body>
 </html>
