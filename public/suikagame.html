@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>スイカゲームDX</title>
+  <title>suikagame</title>
+  <link rel="icon" href="icon.png">
+  <link rel="manifest" href="manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
   <style>
@@ -62,6 +64,11 @@
   </div>
 
 <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("sw_ok"))
+            .catch(err => console.error("sw_err:", err));
+    }
 (() => {
   const { Engine, World, Bodies, Body, Events, Runner, Composite, Vector } = Matter;
   const canvas = document.getElementById('gameCanvas');

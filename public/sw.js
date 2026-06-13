@@ -2,6 +2,11 @@ var CACHE_NAME = 'paint-app-v1';
 var ASSETS = [
 	'/',
 	'/index.html',
+	'/portal.css'
+	'/suikagame.html',
+	'/takomars.html',
+	'/paint.html',
+	'/mplayer.html',
 ];
 
 // インストール処理
